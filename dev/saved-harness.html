@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- The toolbar popup (saved.html) outside the extension: chrome.storage.local is faked with sample items.
+     Open http://localhost:8766/dev/saved-harness.html -->
+<meta charset="utf-8">
+<script>
+  const store = {
+    'item:w:beat someone to the punch': { id: 'w:beat someone to the punch', type: 'word', text: 'beat someone to the punch', meaning: '(Verb) To carry out an action before another person is able to do so.', sentence: 'They beat me to the punch.', translation: '그 사람들이 선수를 쳤어요', movieId: '123', title: 'Sample Show · S1:E3', time: 1824.7, savedAt: 3 },
+    'item:w:city': { id: 'w:city', type: 'word', text: 'city', meaning: '(Noun) A large settlement, bigger than a town', sentence: 'I think the cities you love', translation: '당신이 좋아하는 도시들', movieId: '123', title: 'Sample Show · S1:E2', time: 26.5, savedAt: 2 },
+    'item:s:123:8000': { id: 's:123:8000', type: 'sentence', text: "- Who's on the list?\n- Nobody knows yet.", meaning: '- 명단에 누가 있죠?\n- 아직 아무도 몰라요', movieId: '123', title: '', time: 8, savedAt: 1 },
+    'dualsub-other-key': 'ignored',
+  };
+  const listeners = [];
+  window.chrome = { storage: {
+    local: {
+      get: async () => ({ ...store }),
+      remove: async key => { delete store[key]; listeners.forEach(f => f({ [key]: {} }, 'local')); },
+    },
+    onChanged: { addListener: f => listeners.push(f) },
+  } };
+  // Capture downloads instead of saving files.
+  window.downloads = [];
+  const click = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {
+    if (this.download) fetch(this.href).then(r => r.text()).then(text => downloads.push({ name: this.download, text }));
+    else click.call(this);
+  };
+</script>
+<script>
+  // Render the real saved.html in this document (window.chrome above survives document.open).
+  fetch('/saved.html').then(r => r.text()).then(html => {
+    document.open();
+    document.write(html.replace('src="lib.js"', 'src="/lib.js"').replace('src="saved.js"', 'src="/saved.js"'));
+    document.close();
+  });
+</script>

@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- Fake Netflix watch page: real <video>, stand-in player API, manifest delivered through JSON.parse.
+     Serve the project root (python3 -m http.server 8766) and open http://localhost:8766/dev/harness.html -->
+<meta charset="utf-8">
+<title>DualSub harness</title>
+<link rel="stylesheet" href="/content.css">
+<style>
+  body { margin: 0; background: #000; }
+  .watch-video { position: relative; width: 100vw; height: 100vh; }
+  video { width: 100%; height: 100%; }
+  .player-timedtext { position: absolute; bottom: 30%; width: 100%; color: yellow; text-align: center; font-size: 24px; }
+</style>
+<div class="watch-video">
+  <video muted playsinline></video>
+  <div class="player-timedtext">NETFLIX NATIVE SUBTITLE (should be hidden)</div>
+</div>
+<script>
+  history.replaceState(null, '', '/watch/123');
+  const v = document.querySelector('video');
+  // python's http.server has no Range support, so a plain src is not seekable; a blob is.
+  fetch('/dev/clip.mp4').then(r => r.blob()).then(b => { v.src = URL.createObjectURL(b); });
+  // Like Netflix: switching subtitles to a not-yet-loaded language makes the player fetch a newer manifest.
+  const ttList = ['T:en', 'T:en-cc', 'T:ko', 'T:fr'].map(trackId => ({ trackId }));
+  let ttCurrent = ttList[1];
+  // Optional mid-roll ad stitched into the video, as on Netflix's ad plan (window.fakeAd = { at: 13, dur: 5 }):
+  // video time counts the ad, the segment (title) clock stands still during it and moves in ~250 ms steps.
+  const toTitle = vt => { const a = window.fakeAd; return !a || vt < a.at ? vt : vt < a.at + a.dur ? a.at : vt - a.dur; };
+  const toVideo = tt => { const a = window.fakeAd; return !a || tt < a.at ? tt : tt + a.dur; };
+  setInterval(() => {
+    const a = window.fakeAd, inAd = !!a && v.currentTime >= a.at && v.currentTime < a.at + a.dur;
+    const info = document.querySelector('[data-uia="ads-info-container"]');
+    if (inAd && !info) { const el = document.createElement('div'); el.dataset.uia = 'ads-info-container'; document.body.append(el); }
+    if (!inAd && info) info.remove();
+  }, 50);
+  const fakePlayer = {
+    getMovieId: () => 123, getCurrentTime: () => v.currentTime * 1000,
+    getSegmentTime: () => Math.floor(toTitle(v.currentTime) * 4) * 250,
+    seek: ms => { v.currentTime = toVideo(ms / 1000); }, play: () => v.play(), pause: () => v.pause(),
+    getTimedTextTrackList: () => ttList, getTimedTextTrack: () => ttCurrent,
+    setTimedTextTrack: t => { ttCurrent = t; if (t.trackId === 'T:fr' && !window.noAutoHydrate) setTimeout(() => window.hydrateFr(), 300); },
+  };
+  window.netflix = { appContext: { state: { playerApp: { getAPI: () => ({ videoPlayer: {
+    getAllPlayerSessionIds: () => ['watch-123'],
+    getVideoPlayerBySessionId: () => fakePlayer,
+  } }) } } } };
+</script>
+<script src="/lib.js"></script>
+<script src="/content.js"></script>
+<script>
+  // Stand-in for bridge.js: keeps ☆ saves in memory and answers the way the real bridge does.
+  window.fakeSaved = new Map();
+  addEventListener('message', e => {
+    const m = e.data;
+    if (e.source !== window || !m || m.source !== 'dualsub') return;
+    if (m.type === 'save') fakeSaved.set(m.item.id, { ...m.item, savedAt: Date.now() });
+    if (m.type === 'unsave') fakeSaved.delete(m.id);
+    postMessage({ source: 'dualsub-bridge', type: 'saved-ids', ids: [...fakeSaved.keys()] }, location.origin);
+  });
+</script>
+<script>
+  // Current (2026-06+) manifest shape. 'fr' arrives dehydrated (no URL) until window.hydrateFr() sends a newer manifest.
+  const manifest = fr => JSON.stringify({ result: { movieId: 123, textTracks: [
+    { new_track_id: 'T:en', language: 'en', languageDescription: 'English', rawTrackType: 'subtitles', hydrated: true,
+      downloadables: { 'dfxp-ls-sdh': { urls: [{ cdn_id: 1, url: '/dev/en.xml' }] } } },
+    { new_track_id: 'T:en-cc', language: 'en', languageDescription: 'English', rawTrackType: 'closedcaptions', hydrated: true,
+      downloadables: { 'dfxp-ls-sdh': { urls: [{ cdn_id: 1, url: '/dev/en.xml' }] } } },
+    { new_track_id: 'T:ko', language: 'ko', languageDescription: '한국어', rawTrackType: 'subtitles', hydrated: true,
+      downloadables: { 'imsc1.1': { urls: [{ cdn_id: 7, url: '/dev/ko.xml' }] }, 'nflx-cmisc': { isImage: true, urls: [{ url: '/nope' }] } } },
+    { new_track_id: 'T:fr', language: 'fr', languageDescription: 'Français', rawTrackType: 'subtitles', hydrated: !!fr,
+      downloadables: fr ? { 'imsc1.1': { urls: [{ url: '/dev/ko.xml' }] } } : {} },
+    { new_track_id: 'T:ja', language: 'ja', languageDescription: '日本語', rawTrackType: 'subtitles', hydrated: true,
+      downloadables: { 'nflx-cmisc': { isImage: true, urls: [{ url: '/nope' }] } } },
+    { new_track_id: 'T:forced', language: 'en', languageDescription: 'English', isForcedNarrative: true, rank: -1, downloadables: {} },
+    { new_track_id: 'T:off', language: 'none', isNoneTrack: true, downloadables: {} },
+  ] } });
+  setTimeout(() => JSON.parse(manifest(false)), 300);
+  window.hydrateFr = () => JSON.parse(manifest(true));
+</script>

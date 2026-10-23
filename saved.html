@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- Toolbar popup: what was saved with ☆ on Netflix, with delete and CSV / Anki export. -->
+<meta charset="utf-8">
+<title>Twinline 저장함</title>
+<style>
+  /* Apple-style grouped list: system colors for light and dark, system font, inset rounded card. */
+  :root {
+    --bg: #f2f2f7; --card: #fff; --sep: rgba(60, 60, 67, 0.14); --label: #000; --label-2: rgba(60, 60, 67, 0.62);
+    --label-3: rgba(60, 60, 67, 0.32); --accent: #007aff; --tint: rgba(0, 122, 255, 0.12); --fill: rgba(120, 120, 128, 0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e; --card: #2c2c2e; --sep: rgba(84, 84, 88, 0.6); --label: #fff; --label-2: rgba(235, 235, 245, 0.62);
+      --label-3: rgba(235, 235, 245, 0.32); --accent: #0a84ff; --tint: rgba(10, 132, 255, 0.2); --fill: rgba(120, 120, 128, 0.24);
+    }
+  }
+  body {
+    width: 400px; margin: 0; background: var(--bg); color: var(--label);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif;
+    -webkit-font-smoothing: antialiased; word-break: keep-all;
+  }
+  header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 14px 16px 10px; background: var(--bg); }
+  header b { flex: 1; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  #count { margin-left: 6px; color: var(--label-2); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+  button { padding: 5px 12px; border: none; border-radius: 999px; background: var(--tint); color: var(--accent); font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1.3; cursor: pointer; transition: filter 0.15s; }
+  button:hover, #help:hover { filter: brightness(0.95); }
+  #help { padding: 5px 12px; border-radius: 999px; background: var(--fill); color: var(--label-2); font-size: 12px; font-weight: 600; line-height: 1.3; text-decoration: none; transition: filter 0.15s; }
+  button:disabled { opacity: 0.4; cursor: default; filter: none; }
+  ul { list-style: none; max-height: 480px; margin: 0 12px 14px; padding: 0; overflow-y: auto; border-radius: 12px; background: var(--card); }
+  li { position: relative; padding: 10px 40px 10px 14px; }
+  li + li::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 0.5px solid var(--sep); }
+  .tag { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: var(--tint); color: var(--accent); font-size: 10.5px; font-weight: 600; vertical-align: 1px; }
+  .text { font-size: 14px; font-weight: 600; white-space: pre-line; }
+  .meaning, .context { margin-top: 3px; color: var(--label-2); white-space: pre-line; }
+  .context { color: var(--label-3); }
+  .src { margin-top: 4px; color: var(--label-3); font-size: 11px; }
+  .del { position: absolute; top: 9px; right: 10px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border-radius: 50%; background: var(--fill); color: var(--label-2); font-size: 14px; line-height: 1; opacity: 0; transition: opacity 0.15s; }
+  li:hover .del, .del:focus-visible { opacity: 1; }
+  .del:hover { background: #ff3b30; color: #fff; filter: none; }
+  .empty { padding: 28px 16px; color: var(--label-2); text-align: center; }
+  .empty a { display: inline-block; margin-top: 6px; color: var(--accent); font-weight: 600; text-decoration: none; }
+</style>
+<header>
+  <b>저장한 단어·문장<span id="count"></span></b>
+  <a id="help" href="help.html" target="_blank" title="기능과 단축키 설명">사용법</a>
+  <button id="csv" title="엑셀·구글 시트용">CSV</button>
+  <button id="anki" title="Anki: 파일 → 가져오기">Anki</button>
+</header>
+<ul id="list"></ul>
+<script src="lib.js"></script>
+<script src="saved.js"></script>

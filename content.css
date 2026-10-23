@@ -1,0 +1,381 @@
+/* Apple-style look: translucent "material" cards, system font, SF Symbols-like line icons, system blue accent.
+   Colors follow Apple's dark-mode label/fill values, since everything sits on top of video. */
+#dualsub-root {
+  --ds-list-w: min(360px, 40vw);
+  --ds-material: saturate(180%) blur(24px);
+  --ds-bg: rgba(30, 30, 32, 0.68);
+  --ds-bg-strong: rgba(30, 30, 32, 0.84);
+  --ds-stroke: rgba(255, 255, 255, 0.1);
+  --ds-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  --ds-label: rgba(255, 255, 255, 0.96);
+  --ds-label-2: rgba(235, 235, 245, 0.62);
+  --ds-label-3: rgba(235, 235, 245, 0.34);
+  --ds-fill: rgba(120, 120, 128, 0.28);
+  --ds-fill-strong: rgba(120, 120, 128, 0.42);
+  --ds-accent: #0a84ff;
+  --ds-green: #30d158;
+  --ds-yellow: #ffd60a;
+  --ds-orange: #ff9f0a;
+}
+#dualsub-panel, #dualsub-list, #dualsub-popup, #dualsub-toast {
+  z-index: 2147483647;
+  box-sizing: border-box;
+  border: 1px solid var(--ds-stroke);
+  background: var(--ds-bg);
+  -webkit-backdrop-filter: var(--ds-material);
+  backdrop-filter: var(--ds-material);
+  box-shadow: var(--ds-shadow);
+  color: var(--ds-label);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#dualsub-panel[hidden], #dualsub-list[hidden], #dualsub-popup[hidden], #dualsub-toast[hidden] { display: none; }
+#dualsub-panel svg, #dualsub-popup svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- Panel ---- */
+/* Fixed width, so the buttons and the timing bar don't jump around as lines get longer or shorter. */
+#dualsub-panel {
+  --ds-scale: 1; /* set from the resize grip */
+  position: fixed;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px; /* equal sides: the lines are centered */
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 10px;
+  width: min(92vw, calc(960px * var(--ds-scale)));
+  max-height: calc(100vh - 16px); /* taller than the window (huge scale, tiny window): scroll instead */
+  overflow-y: auto;
+  padding: 14px 16px 12px;
+  border-radius: 20px;
+}
+
+/* The panel can be dragged by any empty part (content.js); controls keep their own cursors. */
+#dualsub-panel { cursor: grab; touch-action: none; }
+#dualsub-panel.dragging { cursor: grabbing; }
+#dualsub-panel select, #dualsub-panel input, #dualsub-panel label { cursor: pointer; }
+
+/* Icon buttons */
+#dualsub-panel .ds-nav, #dualsub-panel .ds-side { display: flex; flex-direction: column; gap: 2px; }
+#dualsub-panel .ds-nav { justify-self: start; }
+#dualsub-panel .ds-side { justify-self: end; }
+#dualsub-panel .ds-btn {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--ds-label-2);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, transform 0.1s;
+}
+#dualsub-panel .ds-btn:hover { background: var(--ds-fill); color: var(--ds-label); }
+#dualsub-panel .ds-btn:active { transform: scale(0.92); }
+#dualsub-panel .ds-btn:focus-visible { outline: 2px solid var(--ds-accent); outline-offset: 1px; }
+#dualsub-panel .ds-nav svg { width: 20px; height: 20px; }
+/* Text buttons (0.75×, 반복): blue while on (replaying slowly, repeat set) */
+#dualsub-panel .ds-btn.ds-text { width: auto; padding: 0 7px; font-size: 11.5px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+#dualsub-panel .ds-btn.ds-text.on { background: rgba(10, 132, 255, 0.24); color: var(--ds-accent); }
+#dualsub-panel .ds-btn[hidden] { visibility: hidden; } /* keeps its space, so the timing bar doesn't shift */
+/* Recording: red, pulsing */
+#dualsub-panel .ds-btn.ds-rec.on { background: rgba(255, 69, 58, 0.2); color: #ff453a; animation: ds-rec 1.2s ease-in-out infinite; }
+@keyframes ds-rec { 50% { opacity: 0.5; } }
+#dualsub-panel .ds-btn.saved, #dualsub-popup .ds-pop-star.saved { color: var(--ds-yellow); }
+#dualsub-panel .ds-btn.saved svg, #dualsub-popup .ds-pop-star.saved svg { fill: currentColor; }
+
+/* Lines */
+#dualsub-panel .ds-lines { min-width: 0; text-align: center; white-space: pre-line; }
+#dualsub-panel .ds-orig {
+  font-size: calc(clamp(18px, 2.2vw, 34px) * var(--ds-scale));
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+}
+#dualsub-panel .ds-trans {
+  margin-top: 6px;
+  color: var(--ds-label-2);
+  font-size: calc(clamp(15px, 1.7vw, 26px) * var(--ds-scale));
+  font-weight: 450;
+  line-height: 1.3;
+}
+#dualsub-panel .ds-trans:empty, #dualsub-panel .ds-orig:empty { display: none; }
+#dualsub-panel .ds-hint { margin-top: 6px; color: var(--ds-orange); font-size: 13px; font-weight: 500; }
+#dualsub-panel .ds-hint:empty { display: none; }
+
+/* Clickable words in the original line */
+#dualsub-panel .ds-word { border-radius: 5px; cursor: pointer; transition: background-color 0.12s; }
+#dualsub-panel .ds-word:hover { background: rgba(255, 255, 255, 0.14); }
+#dualsub-panel .ds-word.on { background: rgba(10, 132, 255, 0.4); }
+#dualsub-panel .ds-word.sel { background: rgba(10, 132, 255, 0.28); } /* while dragging across words */
+
+/* Bottom row: timing bar + auto-pause switch */
+#dualsub-panel .ds-barrow { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; }
+#dualsub-panel .ds-ap {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  color: var(--ds-label-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+/* iOS-style switch */
+#dualsub-panel .ds-ap input {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  margin: 0;
+  border-radius: 9px;
+  background: var(--ds-fill-strong);
+  transition: background-color 0.2s;
+}
+#dualsub-panel .ds-ap input::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s;
+}
+#dualsub-panel .ds-ap input:checked { background: var(--ds-green); }
+#dualsub-panel .ds-ap input:checked::before { transform: translateX(12px); }
+
+/* Timing bar: segments slide left under the fixed center marker (now). */
+#dualsub-panel .ds-bar { position: relative; flex: 1; height: 12px; overflow: hidden; }
+#dualsub-panel .ds-bar::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ds-label);
+}
+#dualsub-panel .ds-strip { position: absolute; left: 50%; top: 4px; height: 4px; will-change: transform; }
+#dualsub-panel .ds-seg {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+#dualsub-panel .ds-seg:hover { background: rgba(255, 255, 255, 0.5); }
+#dualsub-panel .ds-seg.on { background: var(--ds-accent); }
+
+/* Resize grip in the top-right corner */
+#dualsub-panel .ds-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  border-top-right-radius: 20px;
+  background: linear-gradient(225deg, var(--ds-label-3) 0 22%, transparent 22%);
+  cursor: nesw-resize;
+  touch-action: none;
+  transition: background 0.15s, opacity 0.2s;
+}
+#dualsub-panel .ds-resize:hover { background: linear-gradient(225deg, var(--ds-accent) 0 26%, transparent 26%); }
+
+/* 간단히 보기 (⚙): only the lines over the video until the pointer is on the panel, settings are open, or a control
+   has keyboard focus. The hidden controls keep their space, so the lines don't move when they fade in. */
+#dualsub-panel { transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s; }
+#dualsub-panel :is(.ds-nav, .ds-side, .ds-barrow) { transition: opacity 0.2s; }
+#dualsub-panel .ds-lines { border-radius: calc(10px * var(--ds-scale)); transition: background-color 0.2s; }
+#dualsub-panel.ds-compact:not(:hover, :has(.ds-settings:not([hidden]), :focus-visible, .ds-rec.on)) { /* recording: show the red mic */
+  border-color: transparent;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  & :is(.ds-nav, .ds-side, .ds-barrow, .ds-resize) { opacity: 0; }
+  /* Apple TV-style dark box hugging the lines, so white text stays readable on bright scenes. The negative margin
+     cancels the padding, so the lines stay put; no box between lines (all three children empty). */
+  & .ds-lines:has(> :not(:empty)) {
+    justify-self: center;
+    margin: calc(-5px * var(--ds-scale)) 0;
+    padding: calc(5px * var(--ds-scale)) calc(14px * var(--ds-scale));
+    background: rgba(0, 0, 0, 0.62);
+  }
+  & .ds-trans { color: rgba(255, 255, 255, 0.82); }
+}
+
+/* 원문·번역 가리기 (⚙, W/E): blur those lines in the panel and the list until the pointer is on one.
+   em: the blur follows each line's own size (panel scale, smaller list text). */
+#dualsub-root :is(.ds-orig, .ds-trans, .ds-item-orig, .ds-item-trans) { transition: filter 0.15s; }
+#dualsub-root.ds-hide-orig :is(.ds-orig, .ds-item-orig):not(:hover),
+#dualsub-root.ds-hide-trans :is(.ds-trans, .ds-item-trans):not(:hover) { filter: blur(0.3em); }
+
+/* ⚙ settings: languages and shortcut keys, under the bottom row */
+#dualsub-panel .ds-settings {
+  grid-column: 1 / -1;
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-stroke);
+  color: var(--ds-label-2);
+  font-size: 13px;
+  cursor: default;
+}
+#dualsub-panel .ds-set-langs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; margin-bottom: 12px; }
+#dualsub-panel .ds-set-langs label { display: flex; align-items: center; gap: 8px; cursor: default; }
+#dualsub-panel select {
+  -webkit-appearance: none;
+  appearance: none;
+  max-width: 150px;
+  padding: 5px 28px 5px 11px;
+  border: none;
+  border-radius: 8px;
+  background: var(--ds-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ebebf5' stroke-opacity='.6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 8px center / 12px;
+  color: var(--ds-label);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+#dualsub-panel select:hover { background-color: var(--ds-fill-strong); }
+#dualsub-panel select option { background: #2c2c2e; color: #fff; }
+#dualsub-panel .ds-set-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px 24px; }
+#dualsub-panel .ds-set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#dualsub-panel .ds-key {
+  all: unset;
+  min-width: 34px;
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: var(--ds-fill);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  color: var(--ds-label);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+#dualsub-panel .ds-key:hover { background: var(--ds-fill-strong); }
+#dualsub-panel .ds-key.capturing { background: var(--ds-accent); color: #fff; }
+#dualsub-panel .ds-set-foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; }
+#dualsub-panel .ds-set-note { color: var(--ds-label-3); font-size: 11px; line-height: 1.4; }
+
+/* While the list is open, center the panel in the space left of it instead of under it. */
+#dualsub-root.list-open #dualsub-panel {
+  left: calc((100vw - var(--ds-list-w)) / 2);
+  width: min(calc(92vw - var(--ds-list-w)), calc(960px * var(--ds-scale)));
+}
+
+/* ---- Subtitle list: a floating card on the right ---- */
+#dualsub-list {
+  position: fixed;
+  top: 80px; /* below Netflix's top-right report flag */
+  right: 16px;
+  bottom: 20%; /* leave Netflix's bottom-right controls and Skip Intro / Next Episode buttons clickable */
+  width: calc(var(--ds-list-w) - 16px);
+  padding: 8px;
+  border-radius: 20px;
+  background: var(--ds-bg-strong);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ds-fill-strong) transparent;
+}
+#dualsub-list .ds-item {
+  margin: 1px 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: pre-line;
+  transition: background-color 0.12s;
+}
+#dualsub-list .ds-item:hover { background: rgba(255, 255, 255, 0.06); }
+#dualsub-list .ds-item.on { background: rgba(10, 132, 255, 0.26); }
+#dualsub-list .ds-item-orig { font-size: 14px; font-weight: 500; line-height: 1.35; }
+#dualsub-list .ds-item-trans { margin-top: 2px; color: var(--ds-label-2); font-size: 12.5px; line-height: 1.35; }
+#dualsub-list .ds-item-trans:empty { display: none; }
+
+/* ---- Word meaning popup ---- */
+#dualsub-popup {
+  position: fixed;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  background: var(--ds-bg-strong);
+  font-size: 14px;
+  line-height: 1.45;
+}
+#dualsub-popup .ds-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+#dualsub-popup .ds-pop-head b { font-size: 20px; font-weight: 700; letter-spacing: -0.015em; }
+#dualsub-popup .ds-pop-star {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--ds-label-2);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+#dualsub-popup .ds-pop-star:hover { background: var(--ds-fill); color: var(--ds-label); }
+#dualsub-popup .ds-pop-body { color: var(--ds-label); }
+#dualsub-popup .ds-pop-meaning + .ds-pop-meaning { margin-top: 8px; }
+#dualsub-popup .ds-pop-meaning i {
+  color: var(--ds-label-3);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+#dualsub-popup .ds-pop-meaning ol { margin: 3px 0 0; padding-left: 18px; }
+#dualsub-popup .ds-pop-meaning li { margin: 2px 0; }
+#dualsub-popup .ds-pop-ex { margin-top: 1px; color: var(--ds-label-2); font-size: 13px; }
+#dualsub-popup .ds-pop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ds-stroke);
+  font-size: 12px;
+}
+#dualsub-popup .ds-pop-link { color: var(--ds-accent); font-weight: 500; text-decoration: none; }
+#dualsub-popup .ds-pop-link:hover { text-decoration: underline; }
+#dualsub-popup .ds-pop-src { color: var(--ds-label-3); font-size: 11px; text-decoration: none; }
+
+/* ---- "Copied" confirmation over the panel's bottom row ---- */
+#dualsub-toast {
+  position: fixed;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--ds-bg-strong);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Netflix's own subtitles would overlap ours. visibility, not display, so Netflix's layout code is left alone. */
+html.dualsub-on .player-timedtext,
+html.dualsub-on .image-based-subtitles { visibility: hidden !important; }

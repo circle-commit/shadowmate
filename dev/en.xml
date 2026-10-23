@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" xmlns:tts="http://www.w3.org/ns/ttml#styling" ttp:tickRate="10000000" xml:lang="en">
+<body><div>
+<p begin="20000000t" end="40000000t">Um, as you know,</p>
+<p begin="40000000t" end="65000000t">we're planning some <span tts:fontStyle="italic">layoffs</span>.</p>
+<p begin="80000000t" end="100000000t">- Who's on the list?<br/>- Nobody knows yet.</p>
+<p begin="120000000t" end="150000000t">That's not fair &amp; you know it.</p>
+<p begin="170000000t" end="190000000t">Let's talk tomorrow.</p>
+<p begin="210000000t" end="240000000t">Fine.</p>
+<p begin="260000000t" end="300000000t">I think the cities you love use Scranton's paper.</p>
+<p begin="320000000t" end="360000000t">They beat me to the punch.</p>
+</div></body></tt>
