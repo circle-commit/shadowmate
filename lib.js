@@ -222,7 +222,7 @@ const DualSub = (() => {
       list: '자막 목록', settings: '설정: 자막 언어·단축키', resize: '드래그해서 크기 조절 · 더블클릭: 기본 크기',
       lookingUp: '찾는 중…', dictError: '사전을 불러오지 못했어요', noPhrase: '사전에 없는 표현이에요', noWord: '사전에 없는 단어예요',
       savePhrase: '표현 저장', saveWord: '단어 저장', copied: '문장을 복사했어요', copyFailed: '복사하지 못했어요',
-      dictLink: '{0}에서 보기 ↗',
+      dictLink: '{0}에서 보기 ↗', dictLabel: '사전 ', dictAuto: '자동 (언어에 맞게)',
       savedTitle: 'Shadowmate 저장함', savedHeader: '저장한 단어·문장', count: ' {0}개', guide: '사용법', guideTitle: '기능과 단축키 설명',
       guidePage: 'help.html', csvTitle: '엑셀·구글 시트용', ankiTitle: 'Anki: 파일 → 가져오기',
       empty: '아직 없어요. 넷플릭스에서 문장 옆 ☆나 단어 뜻 창의 ☆를 누르세요.', openGuide: '사용법 보기',
@@ -251,7 +251,7 @@ const DualSub = (() => {
       list: 'Subtitle list', settings: 'Settings: languages & shortcuts', resize: 'Drag to resize · double-click: default size',
       lookingUp: 'Looking up…', dictError: 'Couldn’t reach the dictionary', noPhrase: 'Not in the dictionary', noWord: 'Not in the dictionary',
       savePhrase: 'Save phrase', saveWord: 'Save word', copied: 'Line copied', copyFailed: 'Couldn’t copy',
-      dictLink: 'Open in {0} ↗',
+      dictLink: 'Open in {0} ↗', dictLabel: 'Dictionary ', dictAuto: 'Auto (by language)',
       savedTitle: 'Shadowmate saved', savedHeader: 'Saved words & lines', count: ' {0}', guide: 'Guide', guideTitle: 'Features and shortcuts',
       guidePage: 'help.en.html', csvTitle: 'For Excel and Google Sheets', ankiTitle: 'Anki: File → Import',
       empty: 'Nothing yet. On Netflix, press ☆ next to a line or in a word’s popup.', openGuide: 'Open the guide',
@@ -269,18 +269,25 @@ const DualSub = (() => {
     return { orig: base === 'en' ? 'es' : 'en', trans: base };
   }
 
-  // A dictionary for an English word in the user's language: [site name, URL].
-  function dictLink(word, lang) {
-    const base = (lang || '').toLowerCase().split('-')[0], q = encodeURIComponent(word);
-    if (base === 'ko') return ['네이버 사전', `https://en.dict.naver.com/#/search?query=${q}`];
-    if (base === 'ja') return ['Weblio', `https://ejje.weblio.jp/content/${q}`];
-    if (base === 'en') return ['Cambridge Dictionary', `https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(word.replace(/ /g, '-'))}`];
-    return ['Google Translate', `https://translate.google.com/?sl=en&tl=${base || 'en'}&text=${q}&op=translate`];
+  // Dictionaries for the word popup's link: [name, URL for an English word]. `auto` picks one for the user's language.
+  const DICTS = {
+    naver: ['네이버 사전', q => `https://en.dict.naver.com/#/search?query=${q}`],
+    daum: ['다음 사전', q => `https://dic.daum.net/search.do?q=${q}&dic=eng`],
+    papago: ['Papago', (q, l) => `https://papago.naver.com/?sk=en&tk=${l}&st=${q}`],
+    google: ['Google Translate', (q, l) => `https://translate.google.com/?sl=en&tl=${l}&text=${q}&op=translate`],
+    cambridge: ['Cambridge Dictionary', (q, l, w) =>
+      `https://dictionary.cambridge.org/dictionary/${l === 'ko' ? 'english-korean' : 'english'}/${encodeURIComponent(w.replace(/ /g, '-'))}`],
+    weblio: ['Weblio', q => `https://ejje.weblio.jp/content/${q}`],
+  };
+  function dictLink(word, lang, choice) {
+    const base = (lang || '').toLowerCase().split('-')[0] || 'en';
+    const key = DICTS[choice] ? choice : { ko: 'naver', ja: 'weblio', en: 'cambridge' }[base] || 'google';
+    return [DICTS[key][0], DICTS[key][1](encodeURIComponent(word), base, word)];
   }
 
   return { parseTime, parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, lemmaCandidates,
     formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
-    STRINGS, uiLang, t, defaultLangs, dictLink };
+    STRINGS, uiLang, t, defaultLangs, dictLink, DICTS };
 })();
 
 if (typeof module === 'object') module.exports = DualSub;

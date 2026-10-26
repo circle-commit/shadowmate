@@ -2,7 +2,7 @@
 // and netflix.appContext (the player API) is reachable.
 (() => {
   const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, lemmaCandidates,
-    DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates, t, defaultLangs, dictLink } = DualSub;
+    DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates, t, defaultLangs, dictLink, DICTS } = DualSub;
   // TTML profiles, best first. imsc1.1 is the only text one for Korean/Japanese/Chinese; nflx-cmisc is images.
   const FORMATS = ['imsc1.1', 'dfxp-ls-sdh', 'simplesdh'];
   const log = (...a) => console.info('[dualsub]', ...a);
@@ -61,6 +61,7 @@
   prefs.compact = prefs.compact === true; // 간단히 보기: just the lines until the pointer is on the panel
   prefs.hideOrig = prefs.hideOrig === true; // 가리기 (shadowing): blur that line until the pointer is on it
   prefs.hideTrans = prefs.hideTrans === true;
+  if (!DICTS[prefs.dict]) prefs.dict = 'auto'; // the word popup's dictionary link, chosen in ⚙
   prefs.off = prefs.off === true; // 자막 끄기 (H): no panel, Netflix's own subtitles back
   if (![1, 2, 3, 5].includes(prefs.repeat)) prefs.repeat = 1; // 문장 반복: plays per line (1 = off)
   const save = () => { try { localStorage.setItem('dualsub', JSON.stringify(prefs)); } catch {} };
@@ -464,6 +465,9 @@
     save();
     toast(`${ACTIONS[key][0]} ${prefs[key] ? t('on') : t('off')}`); // no button on screen shows the change
   }
+  const dictSel = el('select', { title: t('dictLabel').trim(), onchange: e => { prefs.dict = dictSel.value; save(); unfocus(e); } },
+    el('option', { value: 'auto' }, t('dictAuto')), ...Object.entries(DICTS).map(([k, [name]]) => el('option', { value: k }, name)));
+  dictSel.value = prefs.dict;
   const origSel = el('select', { title: t('origSub'), onchange: e => { prefs.orig = origSel.value; save(); load(); unfocus(e); } });
   const transSel = el('select', { title: t('transSub'), onchange: e => { prefs.trans = transSel.value; save(); load(); unfocus(e); } });
   // Timing bar: every line is a segment on a strip, PX_PER_SEC wide per second, that slides under a fixed center
@@ -500,6 +504,7 @@
     el('div', { className: 'ds-set-langs' },
       el('label', {}, t('origLabel'), origSel),
       el('label', {}, t('transLabel'), transSel),
+      el('label', {}, t('dictLabel'), dictSel),
       keyButtons.hideOrig, keyButtons.hideTrans,
       el('label', { className: 'ds-ap', title: t('compactTitle') }, compactBox, t('compactLabel'))),
     shortcutsEl);
@@ -760,7 +765,7 @@
     const body = el('div', { className: 'ds-pop-body' }, t('lookingUp'));
     const link = (href, label, className) => el('a', { className, href, target: '_blank', rel: 'noopener noreferrer' }, label);
     const source = link(`https://en.wiktionary.org/wiki/${encodeURIComponent(text.toLowerCase())}`, 'Wiktionary', 'ds-pop-src');
-    const dict = dictLink(text, navigator.language); // [site, URL] in the user's language
+    const dict = dictLink(text, navigator.language, prefs.dict); // [site, URL]: chosen in ⚙, or one for the user's language
     popup.replaceChildren(head, body, el('div', { className: 'ds-pop-foot' },
       link(dict[1], t('dictLink', dict[0]), 'ds-pop-link'), source));
     popup.hidden = false;

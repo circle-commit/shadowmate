@@ -224,4 +224,8 @@ test('UI text exists in Korean and English, picked by browser language', () => {
   assert.match(dictLink('city', 'ja-JP')[1], /weblio/);
   assert.equal(dictLink('beat someone to the punch', 'en-GB')[1], 'https://dictionary.cambridge.org/dictionary/english/beat-someone-to-the-punch');
   assert.match(dictLink('city', 'fr-FR')[1], /translate\.google\.com.*tl=fr/);
+  // a chosen dictionary wins over the language's default
+  assert.match(dictLink('city', 'ko-KR', 'daum')[1], /dic\.daum\.net.*q=city/);
+  assert.equal(dictLink('look after', 'ko', 'cambridge')[1], 'https://dictionary.cambridge.org/dictionary/english-korean/look-after');
+  assert.match(dictLink('city', 'ko', 'nope')[1], /naver/); // unknown choice: back to auto
 });
