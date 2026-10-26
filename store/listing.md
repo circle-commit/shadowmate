@@ -4,13 +4,13 @@
 
 ## 기본 정보
 
-- **이름**: manifest의 `name`이 그대로 쓰여요. `Twinline – 넷플릭스 이중 자막으로 영어 공부`
+- **이름**: manifest의 `name`이 그대로 쓰여요. `Shadowmate – 넷플릭스 이중 자막 쉐도잉`
 - **요약(132자 이내)**: manifest의 `description`이 그대로 쓰여요.
   > 넷플릭스를 두 언어 자막으로 보며 영어 쉐도잉. 한 줄씩 듣기·반복·느리게 듣기, 자막 가리기, 단어 뜻, 내 발음 녹음 비교, Anki 내보내기.
 - **카테고리**: 교육
 - **언어**: 한국어
-- **개인정보처리방침 URL**: https://circle-commit.github.io/twinline/privacy.html
-- **지원 사이트**: https://github.com/circle-commit/twinline/issues
+- **개인정보처리방침 URL**: https://circle-commit.github.io/shadowmate/privacy.html
+- **지원 사이트**: https://github.com/circle-commit/shadowmate/issues
 
 ## 자세한 설명
 
@@ -44,7 +44,7 @@
 · 모든 단축키를 원하는 키로 바꿀 수 있어요
 · 패널 위치·크기를 자유롭게 바꿀 수 있어요
 
-넷플릭스 계정이 필요해요. Twinline은 넷플릭스와 관련 없는 개인 프로젝트예요.
+넷플릭스 계정이 필요해요. Shadowmate는 넷플릭스와 관련 없는 개인 프로젝트예요.
 
 ## 개인정보 보호 탭
 

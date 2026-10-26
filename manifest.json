@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Twinline – 넷플릭스 이중 자막으로 영어 공부",
-  "short_name": "Twinline",
-  "version": "1.0.0",
+  "name": "Shadowmate – 넷플릭스 이중 자막 쉐도잉",
+  "short_name": "Shadowmate",
+  "version": "1.0.1",
   "description": "넷플릭스를 두 언어 자막으로 보며 영어 쉐도잉. 한 줄씩 듣기·반복·느리게 듣기, 자막 가리기, 단어 뜻, 내 발음 녹음 비교, Anki 내보내기.",
   "permissions": ["storage"],
   "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "action": { "default_title": "Twinline 저장함", "default_popup": "saved.html",
+  "action": { "default_title": "Shadowmate 저장함", "default_popup": "saved.html",
     "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" } },
   "content_scripts": [
     {

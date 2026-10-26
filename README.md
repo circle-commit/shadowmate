@@ -1,6 +1,6 @@
-# Twinline
+# Shadowmate
 
-(예전 이름: Netflix DualSub)
+(예전 이름: Shadowmate, Netflix DualSub)
 
 넷플릭스 영상 위에 두 언어 자막(예: 영어 + 한국어)을 함께 보여 주는 크롬 확장 프로그램.
 
@@ -99,7 +99,7 @@ node dev/store-shots.mjs
 올릴 zip(확장에 필요한 파일만):
 
 ```bash
-zip -X store/twinline-$(node -p "require('./manifest.json').version").zip manifest.json lib.js content.js content.css bridge.js saved.html saved.js help.html icons/*.png
+zip -X store/shadowmate-$(node -p "require('./manifest.json').version").zip manifest.json lib.js content.js content.css bridge.js saved.html saved.js help.html icons/*.png
 ```
 
 문제가 생기면 넷플릭스 탭의 개발자 도구 콘솔에서 `[dualsub]` 로그를 확인하세요.

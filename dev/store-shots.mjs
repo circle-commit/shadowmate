@@ -12,7 +12,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 mkdirSync('store', { recursive: true });
 
 const server = spawn('python3', ['-m', 'http.server', String(PORT)], { stdio: 'ignore' });
-const profile = mkdtempSync(join(tmpdir(), 'twinline-shots-'));
+const profile = mkdtempSync(join(tmpdir(), 'shadowmate-shots-'));
 const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`,
   '--window-size=1280,800', '--hide-scrollbars', '--mute-audio', '--autoplay-policy=no-user-gesture-required',
   'about:blank'], { stdio: 'ignore' });
@@ -132,7 +132,7 @@ try {
   await page(`<!doctype html><meta charset="utf-8">
     <body style="margin:0;height:100vh;display:flex;align-items:center;gap:22px;padding:0 36px;box-sizing:border-box;background:${BG};font-family:-apple-system,'Apple SD Gothic Neo',sans-serif;color:#fff">
     <img src="${ORIGIN}/icons/icon128.png" width="112" height="112" style="flex:none;margin:-14px">
-    <div><div style="font:700 40px/1.1 -apple-system,sans-serif;letter-spacing:-0.02em">Twinline</div>
+    <div><div style="font:700 40px/1.1 -apple-system,sans-serif;letter-spacing:-0.02em">Shadowmate</div>
     <div style="margin-top:10px;font:500 17px/1.45 -apple-system,'Apple SD Gothic Neo',sans-serif;color:rgba(235,235,245,.75)">넷플릭스로 하는<br>영어 쉐도잉</div></div>`);
   await capture('promo-440x280');
 } finally {
