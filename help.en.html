@@ -1,0 +1,170 @@
+<!doctype html>
+<!-- User guide, opened in a tab from the toolbar popup (saved.html). Static: same colors as the popup, panel icons inline. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shadowmate Guide</title>
+<link rel="icon" href="icons/icon32.png">
+<style>
+  :root {
+    --bg: #f2f2f7; --card: #fff; --sep: rgba(60, 60, 67, 0.14); --label: #000; --label-2: rgba(60, 60, 67, 0.62);
+    --label-3: rgba(60, 60, 67, 0.32); --accent: #007aff; --tint: rgba(0, 122, 255, 0.12); --fill: rgba(120, 120, 128, 0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e; --card: #2c2c2e; --sep: rgba(84, 84, 88, 0.6); --label: #fff; --label-2: rgba(235, 235, 245, 0.62);
+      --label-3: rgba(235, 235, 245, 0.32); --accent: #0a84ff; --tint: rgba(10, 132, 255, 0.2); --fill: rgba(120, 120, 128, 0.24);
+    }
+  }
+  body {
+    margin: 0; background: var(--bg); color: var(--label);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
+  .app-icon { display: block; margin: 0 0 6px -9px; } /* the PNG has 1/8 clear padding: line the tile up with the text */
+  h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .lead { margin: 6px 0 0; color: var(--label-2); }
+  h2 { margin: 36px 0 8px 16px; color: var(--label-2); font-size: 13px; font-weight: 600; }
+  .card { margin: 0; padding: 0; list-style: none; border-radius: 12px; background: var(--card); }
+  .card > * { position: relative; padding: 12px 16px; }
+  .card > * + *::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; border-top: 0.5px solid var(--sep); }
+  .row { display: flex; align-items: flex-start; gap: 12px; }
+  .row .ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--tint); color: var(--accent); }
+  .ic.txt { width: auto; min-width: 30px; padding: 0 6px; box-sizing: border-box; font-size: 10.5px; font-weight: 700; letter-spacing: -0.02em; }
+  .ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .row .tx { flex: 1; min-width: 0; }
+  .row b { font-weight: 600; }
+  .row p, .card p { margin: 2px 0 0; color: var(--label-2); font-size: 14px; }
+  kbd {
+    flex: none; display: inline-block; min-width: 22px; padding: 1px 7px; border-radius: 6px; background: var(--fill);
+    color: var(--label); font: 600 13px/1.6 inherit; font-family: inherit; text-align: center;
+  }
+  .row > kbd { margin-top: 3px; }
+  .switch { display: inline-block; width: 24px; height: 14px; border-radius: 7px; background: var(--label-3); position: relative; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; }
+  .bar { display: inline-flex; gap: 3px; align-items: center; }
+  .bar i { display: block; width: 7px; height: 3px; border-radius: 2px; background: var(--label-3); }
+  .bar i.now { width: 9px; background: var(--accent); }
+  .card > ol { padding-left: 38px; }
+  ol li + li { margin-top: 6px; }
+  .note { margin: 8px 16px 0; color: var(--label-2); font-size: 13px; }
+  .q { font-weight: 600; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  em { font-style: normal; font-weight: 600; }
+</style>
+<main>
+  <img class="app-icon" src="icons/icon128.png" alt="" width="72" height="72">
+  <h1>Shadowmate Guide</h1>
+  <p class="lead">Watch Netflix with subtitles in two languages and study one line at a time.</p>
+
+  <h2>Getting started</h2>
+  <div class="card">
+    <ol>
+      <li>Play anything on Netflix and a panel appears at the bottom of the screen. The top line is the <em>original</em> (the language you're learning, e.g. English, Japanese, Spanish), and the bottom line is the <em>translation</em> (e.g. your language).</li>
+      <li>To change languages, click the settings icon on the right of the panel and pick the <em>original subtitles</em> and <em>translation subtitles</em>. Your choice is remembered.</li>
+      <li>Pin Shadowmate from the puzzle-piece menu in the toolbar to open your saved items and this guide in one click.</li>
+    </ol>
+  </div>
+
+  <h2>A way to study</h2>
+  <div class="card">
+    <div><b>1. Watch once, relaxed</b><p>Don't hide anything at first. Follow the story with the translation. A whole episode is fine, and so is one short scene.</p></div>
+    <div><b>2. Hide and listen</b><p>Hide the original with <kbd>W</kbd> and turn on auto-pause with <kbd>Q</kbd>. Now the video stops at the end of every line. Listen with your ears only and work out what was said.</p></div>
+    <div><b>3. Didn't catch it? Again</b><p>Replay the line with <kbd>S</kbd>. If it's too fast, hear it at 0.75× with <kbd>R</kbd>. If pressing every time is tedious, turn on line repeat (2, 3 or 5 times) with <kbd>T</kbd>.</p></div>
+    <div><b>4. Check</b><p>Hover over the original line to see if you heard it right. Click a word you don't know, or drag over a phrase, to see its meaning, then save it with the star in the popup.</p></div>
+    <div><b>5. Say it out loud</b><p>Turn off hiding with <kbd>W</kbd>, read the original and say it out loud with the same speed and intonation. Replay with <kbd>S</kbd> and repeat two or three times. Once it feels easy, hide it again with <kbd>W</kbd> and try without looking. Record with <kbd>B</kbd> to compare your voice with the native speaker right away.</p></div>
+    <div><b>6. Next line</b><p>With the original hidden again, move on with <kbd>D</kbd> or the space bar and repeat from step 2. When you finish a scene, turn off auto-pause and watch the scene again from the start to see how much you can hear.</p></div>
+  </div>
+  <p class="note">For a harder challenge, hide the translation too with <kbd>E</kbd>. You can export saved words and lines to Anki from your saved items to review them. Keys shown are the defaults.</p>
+
+  <h2>Panel buttons and shortcuts</h2>
+  <div class="card">
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span>
+      <div class="tx"><b>Previous line</b><p>Go to the start of the previous line.</p></div><kbd>A</kbd></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 4v5h5M4.6 15A8 8 0 1 0 6.3 6.3L4 9"/></svg></span>
+      <div class="tx"><b>Replay line</b><p>Hear the current line again from the start.</p></div><kbd>S</kbd></div>
+    <div class="row"><span class="ic txt">0.75×</span>
+      <div class="tx"><b>Slow replay</b><p>Hear the current line again from the start at 0.75× speed. When the line ends, the speed goes back to what it was (including a speed set by a speed-control extension). Use it for lines that were too fast to catch.</p></div><kbd>R</kbd></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span>
+      <div class="tx"><b>Next line</b><p>Go to the start of the next line.</p></div><kbd>D</kbd></div>
+    <div class="row"><span class="ic"><span class="switch"></span></span>
+      <div class="tx"><b>Auto-pause</b><p>When on, the video stops at the end of every line. Say it yourself, then continue with the space bar or replay with <kbd>S</kbd>.</p></div><kbd>Q</kbd></div>
+    <div class="row"><span class="ic txt">Repeat</span>
+      <div class="tx"><b>Line repeat</b><p>Each press cycles Off → 2 → 3 → 5 times. When on, every line plays that many times, then moves on to the next (with auto-pause on, it stops after the last play). The button shows which play you're on, like "Rpt 2/3".</p></div><kbd>T</kbd></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M9.5 8.5h9a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 8 19v-9a1.5 1.5 0 0 1 1.5-1.5zM16 8.5V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg></span>
+      <div class="tx"><b>Copy line</b><p>Copy the current original line to the clipboard as one line. Handy for pasting into a translator or your notes.</p></div><kbd>C</kbd></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></span>
+      <div class="tx"><b>Record &amp; compare</b><p>Press it and the video pauses and recording starts (the button blinks red). Say the line, press again, and you hear the native line, then your recording. The first time, Chrome asks to let www.netflix.com use your microphone. The permission is stored for the Netflix site, so "Allow this time" or "Allow while visiting the site" is the safer choice.</p></div><kbd>B</kbd></div>
+    <div class="row"><span class="ic txt">Compare</span>
+      <div class="tx"><b>Compare again</b><p>Hear the native line, then your recording, again for the line you just recorded. The button only shows on a line you recorded.</p></div><kbd>N</kbd></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c5 0 9 4.5 10 7-.4 1-1.2 2.3-2.4 3.6M6.6 6.6C4.4 8 2.9 10.1 2 12c1 2.5 5 7 10 7 1.9 0 3.6-.6 5.1-1.5M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></span>
+      <div class="tx"><b>Hide original</b><p>Blur the original subtitles. Listen first, then hover over the line to check what you heard.</p></div><kbd>W</kbd></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c5 0 9 4.5 10 7-.4 1-1.2 2.3-2.4 3.6M6.6 6.6C4.4 8 2.9 10.1 2 12c1 2.5 5 7 10 7 1.9 0 3.6-.6 5.1-1.5M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></span>
+      <div class="tx"><b>Hide translation</b><p>Blur the translation subtitles. Guess the meaning from the original, then hover to check. It's hidden in the subtitle list too.</p></div><kbd>E</kbd></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l2.8 5.6 6.2.9-4.5 4.4 1.1 6.2L12 17.2l-5.6 2.9 1.1-6.2L3 9.5l6.2-.9z"/></svg></span>
+      <div class="tx"><b>Save line</b><p>Save the current line with its translation to your saved items. A filled star means it's saved; press again to remove it.</p></div></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg></span>
+      <div class="tx"><b>Subtitle list</b><p>Show all subtitles on the right. The current line is highlighted; click any line to jump to that scene.</p></div></div>
+    <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M13 7a2 2 0 1 0 4 0a2 2 0 1 0-4 0M7 17a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/></svg></span>
+      <div class="tx"><b>Settings</b><p>Change the original and translation languages, hiding, compact view and shortcuts.</p></div></div>
+    <div class="row"><span class="ic"><span class="bar"><i></i><i class="now"></i><i></i></span></span>
+      <div class="tx"><b>Timing bar</b><p>Each bar under the panel is one line of dialogue. The center mark is where you are now; click a bar to go to that line.</p></div></div>
+  </div>
+  <p class="note">Press <kbd>H</kbd> to turn the whole panel off and go back to Netflix's own subtitles. While it's off, other keys go straight to Netflix; press <kbd>H</kbd> again to turn it back on. The keys above are the defaults. They follow the physical key position, so they work with any keyboard layout or input language.</p>
+
+  <h2>Looking up words and phrases</h2>
+  <div class="card">
+    <div><b>One word</b><p>Click a word in the original subtitles to see its English definition (from Wiktionary) and a link to a dictionary in your language. The video stays paused meanwhile. Inflected forms with no entry of their own, like <i>cities</i>, are looked up by their base form, like <i>city</i>.</p></div>
+    <div><b>Idioms and phrases</b><p>Drag across several words to look up the whole expression. For example, drag <i>beat me to the punch</i> and it finds the dictionary form, <i>beat someone to the punch</i>.</p></div>
+    <div><b>Save</b><p>Press the star in the popup to save the word or phrase with its meaning, the original line and the translation.</p></div>
+    <div><b>Close</b><p>Press <kbd>Esc</kbd>, click outside, or move to the next line.</p></div>
+  </div>
+  <p class="note">For now, word lookup only works when the original subtitles are English. Repeat, slow replay, hiding and record &amp; compare work the same for every language.</p>
+
+  <h2>Saved items and export</h2>
+  <div class="card">
+    <div><b>Open saved items</b><p>Click the Shadowmate icon in the toolbar to see your saved words and lines, newest first. Hover over an item and click × to delete it.</p></div>
+    <div><b>CSV</b><p>Download a file you can open in Excel or Google Sheets.</p></div>
+    <div><b>Anki</b><p>In Anki, choose <em>File → Import</em> and pick the downloaded .txt file. The front (word or line), back (meaning and translation) and tags are set up automatically.</p></div>
+  </div>
+  <p class="note">Saved items stay in Chrome, so signing out of Netflix doesn't delete them. Removing the extension does, so export them first.</p>
+
+  <h2>Moving and resizing the panel</h2>
+  <div class="card">
+    <div><b>Compact view</b><p>Turn on <em>Compact view</em> in settings to show just the two subtitle lines on a dark background sized to the text (like Apple TV subtitles), with no buttons. Hover over the subtitles to bring back the buttons and timing bar. Shortcuts keep working while they're hidden.</p></div>
+    <div><b>Move</b><p>Drag an empty spot on the panel to move it anywhere. Double-click an empty spot to put it back.</p></div>
+    <div><b>Size</b><p>Drag the panel's top-right corner. Drag up or right to make it bigger, down or left to make it smaller. Double-click the corner to reset the size.</p></div>
+  </div>
+  <p class="note">Compact view, position and size are remembered.</p>
+
+  <h2>Changing shortcuts</h2>
+  <div class="card">
+    <ol>
+      <li>Click the settings icon on the panel.</li>
+      <li>Click the key button next to the action you want to change, then press the new key. It's saved right away.</li>
+      <li>If you pick a key another action uses, the two actions swap keys. <kbd>Esc</kbd> cancels, and <em>Default</em> restores the original keys.</li>
+    </ol>
+  </div>
+
+  <h2>Good to know</h2>
+  <div class="card">
+    <div><p>Netflix's own subtitles are hidden while the panel is showing.</p></div>
+    <div><p>The panel hides during ads, and the subtitle timing syncs up again when the ad ends. Skipping ads quickly with a speed-control extension is fine.</p></div>
+    <div><p>This extension takes over Netflix's <kbd>S</kbd> (skip intro) shortcut. If you don't want that, change the shortcut.</p></div>
+    <div><p>Turn off other subtitle extensions such as Language Reactor. They use the same keys and overlap on screen.</p></div>
+    <div><p>Your recorded voice stays only in this tab's memory for a moment and is cleared when you record again or switch to another title. It's never saved or sent anywhere, and the microphone turns off as soon as recording ends (up to 30 seconds at a time). While recording, the red mic button stays visible even in compact view.</p></div>
+  </div>
+
+  <h2>Troubleshooting</h2>
+  <div class="card">
+    <div><p class="q">The panel doesn't appear</p><p>Reload the Netflix tab. If you just updated the extension, first click Shadowmate's reload button in <em>chrome://extensions</em>.</p></div>
+    <div><p class="q">It says "Loading … subtitles…"</p><p>Netflix hasn't sent subtitles in that language yet. Wait a few seconds and they'll appear.</p></div>
+    <div><p class="q">It says to turn on … subtitles once in the Netflix subtitle menu</p><p>Pick that language once in the subtitle menu at the bottom of the Netflix player. It then shows up in the panel right away.</p></div>
+    <div><p class="q">It says this title has no subtitles in the chosen language</p><p>In settings, pick another original language that this title has.</p></div>
+    <div><p class="q">It says the microphone can't be used</p><p>Microphone access is blocked. Click the icon at the left of the address bar, allow the microphone for www.netflix.com, and try again.</p></div>
+    <div><p class="q">It says the dictionary couldn't be loaded</p><p>Wiktionary blocks you briefly if you look up too much in a short time. Wait a bit and try again.</p></div>
+  </div>
+</main>
+</html>

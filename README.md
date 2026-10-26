@@ -93,13 +93,16 @@ swift dev/make-icons.swift
 등록 글·심사용 문구는 `store/listing.md`, 개인정보처리방침은 `docs/privacy.html`(GitHub Pages)에 있습니다. 스크린샷(1280×800)과 프로모션 타일은 가짜 넷플릭스 페이지에서 headless Chrome으로 다시 찍을 수 있습니다:
 
 ```bash
-node dev/store-shots.mjs
+node dev/store-shots.mjs      # 한국어 → store/
+node dev/store-shots.mjs en   # 영어 → store/en/
 ```
+
+화면 문구는 `lib.js`의 `STRINGS`(한국어·영어)에 있고, 브라우저 언어가 한국어가 아니면 영어로 보입니다. 스토어 이름·요약은 `_locales/`, 영어 등록 글은 `store/listing.en.md`, 영어 개인정보처리방침은 `docs/privacy.en.html`입니다.
 
 올릴 zip(확장에 필요한 파일만):
 
 ```bash
-zip -X store/shadowmate-$(node -p "require('./manifest.json').version").zip manifest.json lib.js content.js content.css bridge.js saved.html saved.js help.html icons/*.png
+zip -X store/shadowmate-$(node -p "require('./manifest.json').version").zip manifest.json lib.js content.js content.css bridge.js saved.html saved.js help.html help.en.html icons/*.png _locales/*/messages.json
 ```
 
 문제가 생기면 넷플릭스 탭의 개발자 도구 콘솔에서 `[dualsub]` 로그를 확인하세요.

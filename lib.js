@@ -197,8 +197,90 @@ const DualSub = (() => {
     return out;
   }
 
+  // UI text: Korean for Korean browsers, English for everyone else. {0}, {1} are filled in by t().
+  const STRINGS = {
+    ko: {
+      hintNoTrack: '이 작품에는 고른 언어의 자막이 없어요. ⚙에서 다른 언어를 골라 보세요',
+      hintTurnOn: '넷플릭스 자막 메뉴에서 {0} 자막을 한 번 켜 주세요',
+      hintLoading: '{0} 자막 불러오는 중…',
+      hintFailed: '자막을 불러오지 못했어요 (콘솔의 [dualsub] 로그 확인)',
+      repeatOn: '문장 반복 {0}번', repeatOff: '문장 반복 끔', repeatBtn: '반복', repeatProgress: '반복 {0}/{1}',
+      micNotFound: '마이크를 찾을 수 없어요', micBusy: '다른 앱이 마이크를 쓰고 있어요',
+      micDenied: '마이크를 쓸 수 없어요. 주소창 왼쪽 아이콘에서 마이크를 허용해 주세요',
+      recUnsupported: '이 브라우저에서는 녹음할 수 없어요', recording: '녹음 중이에요 · 한 번 더 누르면 끝나요',
+      noTake: '이 문장은 아직 녹음하지 않았어요',
+      subsOff: '자막 꺼짐 · {0}를 누르면 다시 켜져요', subsOn: '자막 켜짐',
+      saveFailed: '저장하지 못했어요. 확장이 다시 로드됐다면 탭을 새로고침하세요', saveLine: '이 문장 저장',
+      origSub: '원어 자막', transSub: '번역 자막', origLabel: '원어 ', transLabel: '번역 ', transNone: '번역 끄기',
+      actPrev: '이전 문장', actRepeat: '현재 문장 반복', actNext: '다음 문장', actAp: '자동 일시정지', actCopy: '문장 복사',
+      actHideOrig: '원문 가리기', actHideTrans: '번역 가리기', actSlow: '느리게 다시 듣기', actLoop: '문장 반복 횟수',
+      actRecord: '녹음·비교', actCompare: '녹음 다시 비교', actOff: '자막 끄기·켜기',
+      apLabel: '자동 정지', compareBtn: '비교', on: '켬', off: '끔',
+      compactLabel: '간단히 보기', compactTitle: '평소엔 자막만 보이고, 패널에 마우스를 올리면 버튼이 나와요',
+      pressKey: '새 키 누르기…', resetKeys: '기본값',
+      keysNote: 'Space·←→·F·M처럼 넷플릭스가 쓰는 키에 지정하면 넷플릭스 동작 대신 이 기능이 실행돼요. Esc: 취소',
+      list: '자막 목록', settings: '설정: 자막 언어·단축키', resize: '드래그해서 크기 조절 · 더블클릭: 기본 크기',
+      lookingUp: '찾는 중…', dictError: '사전을 불러오지 못했어요', noPhrase: '사전에 없는 표현이에요', noWord: '사전에 없는 단어예요',
+      savePhrase: '표현 저장', saveWord: '단어 저장', copied: '문장을 복사했어요', copyFailed: '복사하지 못했어요',
+      dictLink: '{0}에서 보기 ↗',
+      savedTitle: 'Shadowmate 저장함', savedHeader: '저장한 단어·문장', count: ' {0}개', guide: '사용법', guideTitle: '기능과 단축키 설명',
+      guidePage: 'help.html', csvTitle: '엑셀·구글 시트용', ankiTitle: 'Anki: 파일 → 가져오기',
+      empty: '아직 없어요. 넷플릭스에서 문장 옆 ☆나 단어 뜻 창의 ☆를 누르세요.', openGuide: '사용법 보기',
+      tagWord: '단어', tagLine: '문장', del: '삭제',
+    },
+    en: {
+      hintNoTrack: 'This title has no subtitles in the chosen language. Pick another one in ⚙',
+      hintTurnOn: 'Turn on {0} subtitles once in Netflix’s subtitle menu',
+      hintLoading: 'Loading {0} subtitles…',
+      hintFailed: 'Couldn’t load the subtitles (see [dualsub] in the console)',
+      repeatOn: 'Repeat each line {0}×', repeatOff: 'Line repeat off', repeatBtn: 'Repeat', repeatProgress: 'Repeat {0}/{1}',
+      micNotFound: 'No microphone found', micBusy: 'Another app is using the microphone',
+      micDenied: 'Can’t use the microphone. Allow it from the icon at the left of the address bar',
+      recUnsupported: 'This browser can’t record', recording: 'Recording · press again to stop',
+      noTake: 'You haven’t recorded this line yet',
+      subsOff: 'Subtitles off · press {0} to bring them back', subsOn: 'Subtitles on',
+      saveFailed: 'Couldn’t save. If the extension was reloaded, refresh the tab', saveLine: 'Save this line',
+      origSub: 'Original subtitles', transSub: 'Translation subtitles', origLabel: 'Original ', transLabel: 'Translation ', transNone: 'No translation',
+      actPrev: 'Previous line', actRepeat: 'Replay line', actNext: 'Next line', actAp: 'Auto-pause', actCopy: 'Copy line',
+      actHideOrig: 'Hide original', actHideTrans: 'Hide translation', actSlow: 'Replay slowly', actLoop: 'Repeat count',
+      actRecord: 'Record & compare', actCompare: 'Compare again', actOff: 'Subtitles off/on',
+      apLabel: 'Auto-pause', compareBtn: 'Compare', on: 'on', off: 'off',
+      compactLabel: 'Compact view', compactTitle: 'Just the subtitles; the buttons appear when the pointer is on the panel',
+      pressKey: 'Press a key…', resetKeys: 'Reset',
+      keysNote: 'Keys Netflix uses (Space, ←→, F, M) run this feature instead of Netflix’s. Esc: cancel',
+      list: 'Subtitle list', settings: 'Settings: languages & shortcuts', resize: 'Drag to resize · double-click: default size',
+      lookingUp: 'Looking up…', dictError: 'Couldn’t reach the dictionary', noPhrase: 'Not in the dictionary', noWord: 'Not in the dictionary',
+      savePhrase: 'Save phrase', saveWord: 'Save word', copied: 'Line copied', copyFailed: 'Couldn’t copy',
+      dictLink: 'Open in {0} ↗',
+      savedTitle: 'Shadowmate saved', savedHeader: 'Saved words & lines', count: ' {0}', guide: 'Guide', guideTitle: 'Features and shortcuts',
+      guidePage: 'help.en.html', csvTitle: 'For Excel and Google Sheets', ankiTitle: 'Anki: File → Import',
+      empty: 'Nothing yet. On Netflix, press ☆ next to a line or in a word’s popup.', openGuide: 'Open the guide',
+      tagWord: 'Word', tagLine: 'Line', del: 'Delete',
+    },
+  };
+  const uiLang = lang => (/^ko\b/i.test(lang || '') ? 'ko' : 'en');
+  const UI_LANG = uiLang(typeof navigator === 'object' ? navigator.language : '');
+  const t = (key, ...args) => (STRINGS[UI_LANG][key] ?? STRINGS.en[key] ?? key).replace(/\{(\d)\}/g, (_, i) => args[i]);
+
+  // Subtitle languages a new user starts with: their own language as the translation, English to learn (Spanish
+  // when their own language is English).
+  function defaultLangs(lang) {
+    const base = (lang || 'ko').toLowerCase().split('-')[0];
+    return { orig: base === 'en' ? 'es' : 'en', trans: base };
+  }
+
+  // A dictionary for an English word in the user's language: [site name, URL].
+  function dictLink(word, lang) {
+    const base = (lang || '').toLowerCase().split('-')[0], q = encodeURIComponent(word);
+    if (base === 'ko') return ['네이버 사전', `https://en.dict.naver.com/#/search?query=${q}`];
+    if (base === 'ja') return ['Weblio', `https://ejje.weblio.jp/content/${q}`];
+    if (base === 'en') return ['Cambridge Dictionary', `https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(word.replace(/ /g, '-'))}`];
+    return ['Google Translate', `https://translate.google.com/?sl=en&tl=${base || 'en'}&text=${q}&op=translate`];
+  }
+
   return { parseTime, parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, lemmaCandidates,
-    formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates };
+    formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
+    STRINGS, uiLang, t, defaultLangs, dictLink };
 })();
 
 if (typeof module === 'object') module.exports = DualSub;

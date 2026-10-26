@@ -1,5 +1,12 @@
 // Toolbar popup logic. Items are written by bridge.js as chrome.storage.local keys "item:<id>".
 const PREFIX = 'item:';
+const { t } = DualSub;
+// Static text in the browser's language (saved.html holds the Korean, shown until this runs).
+document.title = t('savedTitle');
+document.getElementById('title').textContent = t('savedHeader');
+Object.assign(document.getElementById('help'), { textContent: t('guide'), title: t('guideTitle'), href: t('guidePage') });
+document.getElementById('csv').title = t('csvTitle');
+document.getElementById('anki').title = t('ankiTitle');
 const listEl = document.getElementById('list');
 const el = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
@@ -10,20 +17,20 @@ async function savedItems() {
 
 async function render() {
   const items = await savedItems();
-  document.getElementById('count').textContent = ` ${items.length}개`;
+  document.getElementById('count').textContent = t('count', items.length);
   document.getElementById('csv').disabled = document.getElementById('anki').disabled = !items.length;
   if (!items.length) {
-    listEl.replaceChildren(el('li', { className: 'empty' }, '아직 없어요. 넷플릭스에서 문장 옆 ☆나 단어 뜻 창의 ☆를 누르세요.',
-      el('br'), el('a', { href: 'help.html', target: '_blank' }, '사용법 보기')));
+    listEl.replaceChildren(el('li', { className: 'empty' }, t('empty'),
+      el('br'), el('a', { href: t('guidePage'), target: '_blank' }, t('openGuide'))));
     return;
   }
   listEl.replaceChildren(...items.map(i => el('li', {},
-    el('div', { className: 'text' }, el('span', { className: 'tag' }, i.type === 'word' ? '단어' : '문장'), i.text),
+    el('div', { className: 'text' }, el('span', { className: 'tag' }, i.type === 'word' ? t('tagWord') : t('tagLine')), i.text),
     i.meaning ? el('div', { className: 'meaning' }, i.meaning) : '',
     i.type === 'word' && i.sentence ? el('div', { className: 'context' }, i.sentence) : '',
     el('div', { className: 'src' }, [i.title, DualSub.formatTime(i.time)].filter(Boolean).join(' · ')),
     // detail < 2: the second click of a double-click would hit the next item, which moved into this slot.
-    el('button', { className: 'del', title: '삭제', onclick: e => { if (e.detail < 2) chrome.storage.local.remove(PREFIX + i.id); } }, '×'))));
+    el('button', { className: 'del', title: t('del'), onclick: e => { if (e.detail < 2) chrome.storage.local.remove(PREFIX + i.id); } }, '×'))));
 }
 
 function download(name, text) {

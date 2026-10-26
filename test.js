@@ -210,3 +210,18 @@ test('phraseCandidates tries the phrase, then the dictionary\'s general forms', 
   assert.deepEqual(phraseCandidates(['You', 'know']), ['you know', 'someone know', 'You know']); // never a single word
   assert.ok(phraseCandidates(['a', 'b', 'c', 'd']).length <= 6);
 });
+
+test('UI text exists in Korean and English, picked by browser language', () => {
+  const { STRINGS, uiLang, defaultLangs, dictLink } = require('./lib.js');
+  assert.deepEqual(Object.keys(STRINGS.ko).sort(), Object.keys(STRINGS.en).sort()); // no key missing in either
+  assert.equal(uiLang('ko-KR'), 'ko');
+  assert.equal(uiLang('ja-JP'), 'en');
+  assert.equal(uiLang(''), 'en');
+  assert.deepEqual(defaultLangs('ko-KR'), { orig: 'en', trans: 'ko' }); // existing Korean users: unchanged
+  assert.deepEqual(defaultLangs('ja'), { orig: 'en', trans: 'ja' });
+  assert.deepEqual(defaultLangs('en-US'), { orig: 'es', trans: 'en' });
+  assert.match(dictLink('city', 'ko-KR')[1], /naver/);
+  assert.match(dictLink('city', 'ja-JP')[1], /weblio/);
+  assert.equal(dictLink('beat someone to the punch', 'en-GB')[1], 'https://dictionary.cambridge.org/dictionary/english/beat-someone-to-the-punch');
+  assert.match(dictLink('city', 'fr-FR')[1], /translate\.google\.com.*tl=fr/);
+});

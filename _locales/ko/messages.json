@@ -1,0 +1,11 @@
+{
+  "name": {
+    "message": "Shadowmate – 넷플릭스 이중 자막 쉐도잉"
+  },
+  "description": {
+    "message": "넷플릭스를 두 언어 자막으로 보며 영어·일본어·스페인어 등 외국어 쉐도잉. 한 줄씩 듣기·반복·느리게 듣기, 자막 가리기, 내 발음 녹음 비교, 단어장."
+  },
+  "actionTitle": {
+    "message": "Shadowmate 저장함"
+  }
+}

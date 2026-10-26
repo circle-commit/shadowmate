@@ -2,7 +2,7 @@
 // and netflix.appContext (the player API) is reachable.
 (() => {
   const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, lemmaCandidates,
-    DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates } = DualSub;
+    DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates, t, defaultLangs, dictLink } = DualSub;
   // TTML profiles, best first. imsc1.1 is the only text one for Korean/Japanese/Chinese; nflx-cmisc is images.
   const FORMATS = ['imsc1.1', 'dfxp-ls-sdh', 'simplesdh'];
   const log = (...a) => console.info('[dualsub]', ...a);
@@ -53,7 +53,7 @@
   }
 
   // ---- 2. Preferences (two languages, auto-pause) ----
-  let prefs = { orig: 'en', trans: 'ko', ap: false };
+  let prefs = { ...defaultLangs(navigator.language), ap: false };
   try { prefs = { ...prefs, ...parse(localStorage.getItem('dualsub') || '{}') }; } catch {}
   if (!(prefs.pos && Number.isFinite(prefs.pos.x) && Number.isFinite(prefs.pos.y))) prefs.pos = null; // dragged spot
   prefs.keys = normalizeKeys(prefs.keys); // shortcut per action, changed in the ⚙ settings
@@ -117,15 +117,15 @@
         origEl.textContent = transEl.textContent = '';
       }
       const names = missing.map(x => x.name).join(', ');
-      setHint(!o ? '이 작품에는 고른 언어의 자막이 없어요. ⚙에서 다른 언어를 골라 보세요'
+      setHint(!o ? t('hintNoTrack')
         : !missing.length ? ''
-        : missing.every(x => hydration.get(`${id} ${x.id}`) === 'done') ? `넷플릭스 자막 메뉴에서 ${names} 자막을 한 번 켜 주세요`
-        : `${names} 자막 불러오는 중…`);
+        : missing.every(x => hydration.get(`${id} ${x.id}`) === 'done') ? t('hintTurnOn', names)
+        : t('hintLoading', names));
       log(`loaded ${o && trackKey(o)} (${oc.length}) + ${t ? trackKey(t) : 'none'} (${tc.length})`);
     } catch (e) {
       if (gen !== loadGen) return;
       console.warn('[dualsub] subtitle fetch failed', e);
-      setHint('자막을 불러오지 못했어요 (콘솔의 [dualsub] 로그 확인)');
+      setHint(t('hintFailed'));
     }
   }
 
@@ -256,11 +256,11 @@
     prefs.repeat = REPEATS[(REPEATS.indexOf(prefs.repeat) + 1) % REPEATS.length];
     save();
     renderLoop();
-    toast(prefs.repeat > 1 ? `문장 반복 ${prefs.repeat}번` : '문장 반복 끔');
+    toast(prefs.repeat > 1 ? t('repeatOn', prefs.repeat) : t('repeatOff'));
   }
   function renderLoop() { // "반복 2/3": the play now showing, out of how many
     const b = keyButtons.loop;
-    b.textContent = prefs.repeat > 1 ? `반복 ${Math.min((loop.i === shown ? loop.n : 0) + 1, prefs.repeat)}/${prefs.repeat}` : '반복';
+    b.textContent = prefs.repeat > 1 ? t('repeatProgress', Math.min((loop.i === shown ? loop.n : 0) + 1, prefs.repeat), prefs.repeat) : t('repeatBtn');
     b.classList.toggle('on', prefs.repeat > 1);
   }
 
@@ -290,9 +290,9 @@
     } catch (e) {
       if (rec === r) rec = null;
       renderRec();
-      if (!r.discard) toast(e && e.name === 'NotFoundError' ? '마이크를 찾을 수 없어요'
-        : e && e.name === 'NotReadableError' ? '다른 앱이 마이크를 쓰고 있어요'
-        : '마이크를 쓸 수 없어요. 주소창 왼쪽 아이콘에서 마이크를 허용해 주세요');
+      if (!r.discard) toast(e && e.name === 'NotFoundError' ? t('micNotFound')
+        : e && e.name === 'NotReadableError' ? t('micBusy')
+        : t('micDenied'));
       return;
     }
     if (r.discard) { stream.getTracks().forEach(tr => tr.stop()); return; } // a new title or an ad while asking
@@ -303,7 +303,7 @@
       stream.getTracks().forEach(tr => tr.stop());
       if (rec === r) rec = null;
       renderRec();
-      toast('이 브라우저에서는 녹음할 수 없어요');
+      toast(t('recUnsupported'));
       return;
     }
     r.recorder.ondataavailable = e => chunks.push(e.data);
@@ -320,7 +320,7 @@
     };
     r.timer = setTimeout(() => r.recorder.state === 'recording' && r.recorder.stop(), MAX_TAKE_MS);
     r.recorder.start();
-    toast('녹음 중이에요 · 한 번 더 누르면 끝나요');
+    toast(t('recording'));
   }
   function cancelRecord() { // a new title or an ad: drop the take in progress
     if (!rec) return;
@@ -345,7 +345,7 @@
   function compareAgain() {
     if (rec) return; // the original and the old take would go into the new recording
     if (take && take.k === shown) startCompare();
-    else toast('이 문장은 아직 녹음하지 않았어요');
+    else toast(t('noTake'));
   }
   function playTake() {
     const c = compare;
@@ -370,7 +370,7 @@
     prefs.off = !prefs.off;
     save();
     if (prefs.off) { closePopup(); cancelRecord(); stopCompare(); } // nothing of ours left on screen or recording
-    toast(prefs.off ? `자막 꺼짐 · ${keyLabel(prefs.keys.off)}를 누르면 다시 켜져요` : '자막 켜짐');
+    toast(prefs.off ? t('subsOff', keyLabel(prefs.keys.off)) : t('subsOn'));
   }
 
   function toggleAP() {
@@ -417,7 +417,7 @@
     if (m.type === 'saved-ids' && Array.isArray(m.ids)) savedIds = new Set(m.ids);
     else if (m.type === 'save-failed' && typeof m.id === 'string') {
       if (!savedIds.delete(m.id)) savedIds.add(m.id); // undo the optimistic toggle
-      setHint('저장하지 못했어요. 확장이 다시 로드됐다면 탭을 새로고침하세요');
+      setHint(t('saveFailed'));
     } else return;
     updateStars();
   });
@@ -429,7 +429,7 @@
   const lineInfo = i => ({ movieId: movieId(), title: readTitle() || titles.get(movieId()) || '', time: cues[i].start });
   const sentenceItem = i => ({ ...lineInfo(i), id: `s:${movieId()}:${Math.round(cues[i].start * 1000)}`,
     type: 'sentence', text: cues[i].text, meaning: trans[i] || '' });
-  const starBtn = btn(icon('star'), '이 문장 저장', () => { if (cues[shown]) toggleSave(sentenceItem(shown)); });
+  const starBtn = btn(icon('star'), t('saveLine'), () => { if (cues[shown]) toggleSave(sentenceItem(shown)); });
   function updateStars() {
     starBtn.classList.toggle('saved', !!cues[shown] && savedIds.has(sentenceItem(shown).id));
     if (wordStar) wordStar.classList.toggle('saved', savedIds.has(wordItem.id));
@@ -462,10 +462,10 @@
     hideBoxes[key].checked = prefs[key];
     applyHide();
     save();
-    toast(`${ACTIONS[key][0]} ${prefs[key] ? '켬' : '끔'}`); // no button on screen shows the change
+    toast(`${ACTIONS[key][0]} ${prefs[key] ? t('on') : t('off')}`); // no button on screen shows the change
   }
-  const origSel = el('select', { title: '원어 자막', onchange: e => { prefs.orig = origSel.value; save(); load(); unfocus(e); } });
-  const transSel = el('select', { title: '번역 자막', onchange: e => { prefs.trans = transSel.value; save(); load(); unfocus(e); } });
+  const origSel = el('select', { title: t('origSub'), onchange: e => { prefs.orig = origSel.value; save(); load(); unfocus(e); } });
+  const transSel = el('select', { title: t('transSub'), onchange: e => { prefs.trans = transSel.value; save(); load(); unfocus(e); } });
   // Timing bar: every line is a segment on a strip, PX_PER_SEC wide per second, that slides under a fixed center
   // marker, so the lines just before and after now are visible. Clicking a segment jumps to that line.
   const PX_PER_SEC = 25;
@@ -480,28 +480,28 @@
   list.addEventListener('wheel', () => { listScrolledAt = performance.now(); }, { passive: true });
 
   // ---- Shortcuts: one key per action, changed in the ⚙ settings row (click a key, press the new one) ----
-  const ACTIONS = { prev: ['이전 문장', () => go(-1)], repeat: ['현재 문장 반복', () => go(0)],
-    next: ['다음 문장', () => go(1)], ap: ['자동 일시정지', toggleAP], copy: ['문장 복사', () => copyLine()],
-    hideOrig: ['원문 가리기', () => toggleHide('hideOrig')], hideTrans: ['번역 가리기', () => toggleHide('hideTrans')],
-    slow: ['느리게 다시 듣기', slowRepeat], loop: ['문장 반복 횟수', cycleRepeat],
-    record: ['녹음·비교', toggleRecord], compare: ['녹음 다시 비교', compareAgain], off: ['자막 끄기·켜기', toggleOff] };
+  const ACTIONS = { prev: [t('actPrev'), () => go(-1)], repeat: [t('actRepeat'), () => go(0)],
+    next: [t('actNext'), () => go(1)], ap: [t('actAp'), toggleAP], copy: [t('actCopy'), () => copyLine()],
+    hideOrig: [t('actHideOrig'), () => toggleHide('hideOrig')], hideTrans: [t('actHideTrans'), () => toggleHide('hideTrans')],
+    slow: [t('actSlow'), slowRepeat], loop: [t('actLoop'), cycleRepeat],
+    record: [t('actRecord'), toggleRecord], compare: [t('actCompare'), compareAgain], off: [t('actOff'), toggleOff] };
   const keyButtons = { prev: btn(icon('prev'), '', () => go(-1)), repeat: btn(icon('repeat'), '', () => go(0)),
-    next: btn(icon('next'), '', () => go(1)), ap: el('label', { className: 'ds-ap' }, apBox, '자동 정지'),
+    next: btn(icon('next'), '', () => go(1)), ap: el('label', { className: 'ds-ap' }, apBox, t('apLabel')),
     copy: btn(icon('copy'), '', () => copyLine()),
     slow: Object.assign(btn(`${SLOW_RATE}×`, '', slowRepeat), { className: 'ds-btn ds-text ds-slow' }),
-    loop: Object.assign(btn('반복', '', cycleRepeat), { className: 'ds-btn ds-text ds-loop' }),
+    loop: Object.assign(btn(t('repeatBtn'), '', cycleRepeat), { className: 'ds-btn ds-text ds-loop' }),
     record: Object.assign(btn(icon('mic'), '', toggleRecord), { className: 'ds-btn ds-rec' }),
-    compare: Object.assign(btn('비교', '', compareAgain), { className: 'ds-btn ds-text ds-cmp', hidden: true }),
-    hideOrig: el('label', { className: 'ds-ap' }, hideBoxes.hideOrig, '원문 가리기'),
-    hideTrans: el('label', { className: 'ds-ap' }, hideBoxes.hideTrans, '번역 가리기') };
+    compare: Object.assign(btn(t('compareBtn'), '', compareAgain), { className: 'ds-btn ds-text ds-cmp', hidden: true }),
+    hideOrig: el('label', { className: 'ds-ap' }, hideBoxes.hideOrig, t('actHideOrig')),
+    hideTrans: el('label', { className: 'ds-ap' }, hideBoxes.hideTrans, t('actHideTrans')) };
   // ⚙ row: subtitle languages (static, filled by load()) and the shortcut keys (re-rendered below).
   const shortcutsEl = el('div');
   const settingsEl = el('div', { className: 'ds-settings', hidden: true },
     el('div', { className: 'ds-set-langs' },
-      el('label', {}, '원어 ', origSel),
-      el('label', {}, '번역 ', transSel),
+      el('label', {}, t('origLabel'), origSel),
+      el('label', {}, t('transLabel'), transSel),
       keyButtons.hideOrig, keyButtons.hideTrans,
-      el('label', { className: 'ds-ap', title: '평소엔 자막만 보이고, 패널에 마우스를 올리면 버튼이 나와요' }, compactBox, '간단히 보기')),
+      el('label', { className: 'ds-ap', title: t('compactTitle') }, compactBox, t('compactLabel'))),
     shortcutsEl);
   let capturing = null; // the action waiting for its new key
   function renderShortcuts() {
@@ -509,18 +509,18 @@
     if (settingsEl.hidden) return;
     const keyBtn = a => el('button', { type: 'button', className: 'ds-key' + (capturing === a ? ' capturing' : ''),
       onclick: () => { capturing = capturing === a ? null : a; renderShortcuts(); } },
-      capturing === a ? '새 키 누르기…' : keyLabel(prefs.keys[a]));
+      capturing === a ? t('pressKey') : keyLabel(prefs.keys[a]));
     shortcutsEl.replaceChildren(
       el('div', { className: 'ds-set-grid' },
         ...Object.keys(ACTIONS).map(a => el('div', { className: 'ds-set-row' }, el('span', {}, ACTIONS[a][0]), keyBtn(a)))),
       el('div', { className: 'ds-set-foot' },
-        el('span', { className: 'ds-set-note' }, 'Space·←→·F·M처럼 넷플릭스가 쓰는 키에 지정하면 넷플릭스 동작 대신 이 기능이 실행돼요. Esc: 취소'),
+        el('span', { className: 'ds-set-note' }, t('keysNote')),
         el('button', { type: 'button', className: 'ds-key', onclick: () => {
           prefs.keys = { ...DEFAULT_KEYS };
           capturing = null;
           save();
           renderShortcuts();
-        } }, '기본값')));
+        } }, t('resetKeys'))));
   }
   const toggleSettings = () => { settingsEl.hidden = !settingsEl.hidden; capturing = null; renderShortcuts(); };
 
@@ -530,8 +530,8 @@
     // Three icons each side, mirroring the navigation, so the lines sit in the panel's center.
     el('div', { className: 'ds-side' },
       starBtn,
-      btn(icon('list'), '자막 목록', toggleList),
-      btn(icon('settings'), '설정: 자막 언어·단축키', toggleSettings)),
+      btn(icon('list'), t('list'), toggleList),
+      btn(icon('settings'), t('settings'), toggleSettings)),
     el('div', { className: 'ds-barrow' }, keyButtons.copy, keyButtons.slow, keyButtons.record, keyButtons.compare, bar,
       keyButtons.loop, keyButtons.ap),
     settingsEl);
@@ -541,7 +541,7 @@
 
   // ---- Resizing: drag the grip in the top-right corner (up/right = bigger), double-click it for the default size.
   // The panel stays anchored at its bottom edge and grows upward; --ds-scale scales the text and the width cap.
-  const grip = el('div', { className: 'ds-resize', title: '드래그해서 크기 조절 · 더블클릭: 기본 크기' });
+  const grip = el('div', { className: 'ds-resize', title: t('resize') });
   panel.append(grip);
   const applyScale = () => panel.style.setProperty('--ds-scale', String(prefs.scale));
   applyScale();
@@ -757,11 +757,12 @@
     }
     const words = spans.map(sp => sp.textContent), text = words.join(' ');
     const head = el('div', { className: 'ds-pop-head' }, el('b', {}, text));
-    const body = el('div', { className: 'ds-pop-body' }, '찾는 중…');
+    const body = el('div', { className: 'ds-pop-body' }, t('lookingUp'));
     const link = (href, label, className) => el('a', { className, href, target: '_blank', rel: 'noopener noreferrer' }, label);
     const source = link(`https://en.wiktionary.org/wiki/${encodeURIComponent(text.toLowerCase())}`, 'Wiktionary', 'ds-pop-src');
+    const dict = dictLink(text, navigator.language); // [site, URL] in the user's language
     popup.replaceChildren(head, body, el('div', { className: 'ds-pop-foot' },
-      link(`https://en.dict.naver.com/#/search?query=${encodeURIComponent(text)}`, '네이버 사전에서 보기 ↗', 'ds-pop-link'), source));
+      link(dict[1], t('dictLink', dict[0]), 'ds-pop-link'), source));
     popup.hidden = false;
     placePopup();
     const { entry, error } = await define(phrase ? phraseCandidates(words) : wordCandidates(text));
@@ -773,14 +774,14 @@
         el('i', {}, m.pos),
         el('ol', {}, ...m.defs.map(d => el('li', {}, d.text, d.example ? el('div', { className: 'ds-pop-ex' }, d.example) : ''))))));
     } else {
-      body.textContent = error ? '사전을 불러오지 못했어요' : phrase ? '사전에 없는 표현이에요' : '사전에 없는 단어예요';
+      body.textContent = error ? t('dictError') : phrase ? t('noPhrase') : t('noWord');
       if (error) log('lookup failed', error);
     }
     const headword = entry ? entry.word : text;
     wordItem = { ...lineInfo(line), id: `w:${headword.toLowerCase()}`, type: 'word', text: headword,
       meaning: entry ? entry.meanings.map(m => `(${m.pos}) ${m.defs[0].text}`).join(' / ') : '',
       sentence: cues[line].text, translation: trans[line] || '' };
-    wordStar = el('button', { className: 'ds-pop-star', type: 'button', title: phrase ? '표현 저장' : '단어 저장',
+    wordStar = el('button', { className: 'ds-pop-star', type: 'button', title: phrase ? t('savePhrase') : t('saveWord'),
       onclick: () => toggleSave(wordItem) }, icon('star'));
     head.append(wordStar);
     updateStars();
@@ -825,7 +826,7 @@
       const pl = document.querySelector('[data-uia="player"]');
       if (pl) pl.focus(); // Space/arrows back to Netflix
     }
-    toast(ok ? '문장을 복사했어요' : '복사하지 못했어요');
+    toast(ok ? t('copied') : t('copyFailed'));
   }
   let toastTimer = 0;
   function toast(text) {
@@ -873,7 +874,7 @@
 
   function fillSelect(sel, tracks, chosen, allowOff) {
     sel.replaceChildren(
-      ...(allowOff ? [el('option', { value: '' }, '번역 끄기')] : []),
+      ...(allowOff ? [el('option', { value: '' }, t('transNone'))] : []),
       ...tracks.map(t => el('option', { value: trackKey(t), selected: t === chosen }, t.name + (t.cc ? ' [CC]' : ''))));
     if (!chosen) sel.value = '';
   }
