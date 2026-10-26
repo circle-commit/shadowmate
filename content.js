@@ -107,6 +107,7 @@
       cues = oc;
       trans = pairCues(oc, tc);
       origIsEnglish = english;
+      transLang = t ? t.lang : ''; // the word popup's dictionary explains in this language
       renderCues();
       if (same) {
         transEl.textContent = shown >= 0 ? trans[shown] : '';
@@ -651,7 +652,7 @@
   // request a browser makes.)
   const WIKTIONARY = 'https://en.wiktionary.org/api/rest_v1/page/definition/';
   const entries = new Map(); // word -> Promise of {word, meanings} or null
-  let origIsEnglish = false, popupSpans = null; // popupSpans: the looked-up words' spans
+  let origIsEnglish = false, transLang = '', popupSpans = null; // popupSpans: the looked-up words' spans
   // Wiktionary HTML to text, minus inline <style> (TemplateStyles CSS) and nested sub-sense lists (the API also lists
   // those as their own definitions).
   function htmlText(html) {
@@ -766,7 +767,8 @@
     const body = el('div', { className: 'ds-pop-body' }, t('lookingUp'));
     const link = (href, label, className) => el('a', { className, href, target: '_blank', rel: 'noopener noreferrer' }, label);
     const source = link(`https://en.wiktionary.org/wiki/${encodeURIComponent(text.toLowerCase())}`, 'Wiktionary', 'ds-pop-src');
-    const dict = dictLink(text, navigator.language, prefs.dict); // [site, URL]: chosen in ⚙, or one for the user's language
+    // [site, URL]: chosen in ⚙ or picked for the translation's language (the browser's without a translation)
+    const dict = dictLink(text, 'en', transLang || navigator.language, prefs.dict);
     popup.replaceChildren(head, body, el('div', { className: 'ds-pop-foot' },
       link(dict[1], t('dictLink', dict[0]), 'ds-pop-link'), source));
     popup.hidden = false;

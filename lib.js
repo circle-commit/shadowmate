@@ -269,20 +269,23 @@ const DualSub = (() => {
     return { orig: base === 'en' ? 'es' : 'en', trans: base };
   }
 
-  // Dictionaries for the word popup's link: [name, URL for an English word]. `auto` picks one for the user's language.
+  // Dictionaries for the word popup's link: [name, URL] for a word in language `from`, explained in language `to` (the
+  // translation subtitles' language, else the browser's). Naver, Daum and Weblio are English dictionaries. `auto`
+  // picks one for `to`.
   const DICTS = {
     naver: ['네이버 사전', q => `https://en.dict.naver.com/#/search?query=${q}`],
     daum: ['다음 사전', q => `https://dic.daum.net/search.do?q=${q}&dic=eng`],
-    papago: ['Papago', (q, l) => `https://papago.naver.com/?sk=en&tk=${l}&st=${q}`],
-    google: ['Google Translate', (q, l) => `https://translate.google.com/?sl=en&tl=${l}&text=${q}&op=translate`],
+    papago: ['Papago', (q, l, w, f) => `https://papago.naver.com/?sk=${f}&tk=${l}&st=${q}`],
+    google: ['Google Translate', (q, l, w, f) => `https://translate.google.com/?sl=${f}&tl=${l}&text=${q}&op=translate`],
     cambridge: ['Cambridge Dictionary', (q, l, w) =>
       `https://dictionary.cambridge.org/dictionary/${l === 'ko' ? 'english-korean' : 'english'}/${encodeURIComponent(w.replace(/ /g, '-'))}`],
     weblio: ['Weblio', q => `https://ejje.weblio.jp/content/${q}`],
   };
-  function dictLink(word, lang, choice) {
-    const base = (lang || '').toLowerCase().split('-')[0] || 'en';
+  function dictLink(word, from, to, choice) {
+    const code = l => (l || '').toLowerCase().split('-')[0];
+    const base = code(to) || 'en', src = code(from) || 'en';
     const key = DICTS[choice] ? choice : { ko: 'naver', ja: 'weblio', en: 'cambridge' }[base] || 'google';
-    return [DICTS[key][0], DICTS[key][1](encodeURIComponent(word), base, word)];
+    return [DICTS[key][0], DICTS[key][1](encodeURIComponent(word), base, word, src)];
   }
 
   return { parseTime, parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, lemmaCandidates,
