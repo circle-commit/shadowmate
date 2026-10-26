@@ -227,6 +227,7 @@
   // ends. That speed may come from Netflix's speed menu or a speed extension. Writing playbackRate is safe on Netflix
   // (unlike currentTime).
   const SLOW_RATE = 0.75;
+  const CLEAR_AFTER = 2; // seconds of silence after a line before it leaves the screen
   // Video Speed Controller (a common speed extension) runs in this page too and treats any speed change it didn't
   // make as the site's: it adopts one made within 0.3 s of a click, and reverts the rest to the user's speed (seen on
   // Netflix, VSC 2026). With VSC, change the speed through VSC itself so it knows the change is ours.
@@ -1014,7 +1015,9 @@
 
     // While our own seek lands the clock still reads the old spot: show the line we jumped to (as currentCue() picks
     // it), so a 문장 반복 replay doesn't flash the next line.
-    const show = stuck ? stuck.i : performance.now() < jumpedUntil ? armed : i;
+    // More than CLEAR_AFTER s of silence after a line clears it (cueIndexAt keeps the last line until the next one).
+    const show = stuck ? stuck.i : performance.now() < jumpedUntil ? armed
+      : i >= 0 && t > cues[i].end + CLEAR_AFTER ? -1 : i;
     if (show !== shown) {
       for (const e of [segs[shown], items[shown]]) if (e) e.classList.remove('on');
       shown = show;
