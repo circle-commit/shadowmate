@@ -84,7 +84,7 @@ try {
 
   // 1. Two languages at once
   await harness({});
-  await evaluate(stage('두 언어 자막을 한 화면에', '영어와 한국어를 함께 보며 한 문장씩 공부해요'));
+  await evaluate(stage('두 언어 자막을 한 화면에', '배우는 언어와 한국어를 함께 · 넷플릭스에 있는 자막이면 어떤 언어든'));
   await seek(33);
   await capture('shot-1');
 
@@ -133,7 +133,7 @@ try {
     <body style="margin:0;height:100vh;display:flex;align-items:center;gap:22px;padding:0 36px;box-sizing:border-box;background:${BG};font-family:-apple-system,'Apple SD Gothic Neo',sans-serif;color:#fff">
     <img src="${ORIGIN}/icons/icon128.png" width="112" height="112" style="flex:none;margin:-14px">
     <div><div style="font:700 40px/1.1 -apple-system,sans-serif;letter-spacing:-0.02em">Shadowmate</div>
-    <div style="margin-top:10px;font:500 17px/1.45 -apple-system,'Apple SD Gothic Neo',sans-serif;color:rgba(235,235,245,.75)">넷플릭스로 하는<br>영어 쉐도잉</div></div>`);
+    <div style="margin-top:10px;font:500 17px/1.45 -apple-system,'Apple SD Gothic Neo',sans-serif;color:rgba(235,235,245,.75)">넷플릭스로 하는<br>외국어 쉐도잉</div></div>`);
   await capture('promo-440x280');
 } finally {
   cleanup();
