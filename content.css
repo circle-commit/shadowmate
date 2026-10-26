@@ -350,6 +350,12 @@
 #dualsub-popup .ds-pop-meaning ol { margin: 3px 0 0; padding-left: 18px; }
 #dualsub-popup .ds-pop-meaning li { margin: 2px 0; }
 #dualsub-popup .ds-pop-ex { margin-top: 1px; color: var(--ds-label-2); font-size: 13px; }
+/* 뜻 번역: the translated word beside the headword, the English definition under its translation */
+#dualsub-popup .ds-pop-tr { margin-left: 8px; color: var(--ds-accent); font-size: 16px; font-weight: 600; }
+#dualsub-popup .ds-pop-en { margin-top: 1px; color: var(--ds-label-3); font-size: 12px; }
+#dualsub-popup .ds-pop-mt { margin-top: 6px; font-weight: 600; }
+#dualsub-popup .ds-pop-note { color: var(--ds-label-3); font-size: 11.5px; font-weight: 400; }
+#dualsub-popup .ds-pop-note:empty { display: none; }
 #dualsub-popup .ds-pop-foot {
   display: flex;
   align-items: center;

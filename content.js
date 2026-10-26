@@ -751,6 +751,24 @@
   origEl.addEventListener('pointerup', e => endWordDrag(e, true));
   origEl.addEventListener('pointercancel', e => endWordDrag(e, false));
 
+  // 뜻 번역: Chrome's built-in Translator puts the English definitions into the translation subtitles' language on
+  // this computer (only its one-time language model download uses the network). Other browsers, or an unsupported
+  // language pair: English only.
+  const translators = new Map(); // language -> Promise<Translator | null>
+  let modelNote = null; // the open popup's "downloading the model" line
+  function translatorFor(to) {
+    if (!to || to === 'en' || typeof Translator === 'undefined') return Promise.resolve(null);
+    if (!translators.has(to)) {
+      const opts = { sourceLanguage: 'en', targetLanguage: to };
+      translators.set(to, Translator.availability(opts)
+        .then(a => a === 'unavailable' ? null : Translator.create({ ...opts, monitor: m => m.addEventListener('downloadprogress', e => {
+          if (modelNote) modelNote.textContent = e.loaded < 1 ? t('modelLoading', Math.round(e.loaded * 100)) : '';
+        }) }))
+        .catch(e => { translators.delete(to); log('translator', e); return null; })); // e.g. no click to allow the download: next time
+    }
+    return translators.get(to);
+  }
+
   async function openLookup(spans) {
     closePopup();
     const line = shown, phrase = spans.length > 1;
@@ -763,13 +781,17 @@
       stuck = stuck || { i: shown, at: clock(v), sawPause: false };
     }
     const words = spans.map(sp => sp.textContent), text = words.join(' ');
+    // Asked for now, inside the click: downloading the model the first time needs the user's gesture.
+    const code = (transLang || '').toLowerCase().split('-')[0];
+    const trP = translatorFor(code === 'zh' ? transLang : code);
     const head = el('div', { className: 'ds-pop-head' }, el('b', {}, text));
     const body = el('div', { className: 'ds-pop-body' }, t('lookingUp'));
     const link = (href, label, className) => el('a', { className, href, target: '_blank', rel: 'noopener noreferrer' }, label);
     const source = link(`https://en.wiktionary.org/wiki/${encodeURIComponent(text.toLowerCase())}`, 'Wiktionary', 'ds-pop-src');
     // [site, URL]: chosen in ⚙ or picked for the translation's language (the browser's without a translation)
     const dict = dictLink(text, 'en', transLang || navigator.language, prefs.dict);
-    popup.replaceChildren(head, body, el('div', { className: 'ds-pop-foot' },
+    modelNote = el('div', { className: 'ds-pop-note' });
+    popup.replaceChildren(head, body, modelNote, el('div', { className: 'ds-pop-foot' },
       link(dict[1], t('dictLink', dict[0]), 'ds-pop-link'), source));
     popup.hidden = false;
     placePopup();
@@ -780,7 +802,7 @@
       source.href = `https://en.wiktionary.org/wiki/${encodeURIComponent(entry.word)}`;
       body.replaceChildren(...entry.meanings.map(m => el('div', { className: 'ds-pop-meaning' },
         el('i', {}, m.pos),
-        el('ol', {}, ...m.defs.map(d => el('li', {}, d.text, d.example ? el('div', { className: 'ds-pop-ex' }, d.example) : ''))))));
+        el('ol', {}, ...m.defs.map(d => el('li', {}, el('div', { className: 'ds-pop-def' }, d.text), d.example ? el('div', { className: 'ds-pop-ex' }, d.example) : ''))))));
     } else {
       body.textContent = error ? t('dictError') : phrase ? t('noPhrase') : t('noWord');
       if (error) log('lookup failed', error);
@@ -794,6 +816,22 @@
     head.append(wordStar);
     updateStars();
     placePopup();
+    const tr = await trP;
+    if (!tr || popupSpans !== spans || error) return;
+    try {
+      if (entry) { // the headword and each definition; the English stays underneath
+        const defs = [...body.querySelectorAll('.ds-pop-def')];
+        const out = await Promise.all([entry.word, ...defs.map(d => d.textContent)].map(s => tr.translate(s)));
+        if (popupSpans !== spans) return;
+        head.querySelector('b').append(el('span', { className: 'ds-pop-tr' }, out[0]));
+        defs.forEach((d, k) => { const en = d.textContent; d.textContent = out[k + 1]; d.append(el('div', { className: 'ds-pop-en' }, en)); });
+      } else { // not in the dictionary: at least a machine translation
+        const out = await tr.translate(text);
+        if (popupSpans !== spans) return;
+        body.append(el('div', { className: 'ds-pop-mt' }, out, el('span', { className: 'ds-pop-note' }, ` · ${t('machine')}`)));
+      }
+      placePopup();
+    } catch (e) { log('translate', e); }
   }
 
   // Centered on the looked-up words, above the whole original line (so a word on its 2nd row doesn't hide the 1st),
