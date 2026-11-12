@@ -37,14 +37,45 @@
   .del { position: absolute; top: 9px; right: 10px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border-radius: 50%; background: var(--fill); color: var(--label-2); font-size: 14px; line-height: 1; opacity: 0; transition: opacity 0.15s; }
   li:hover .del, .del:focus-visible { opacity: 1; }
   .del:hover { background: #ff3b30; color: #fff; filter: none; }
-  .empty { padding: 28px 16px; color: var(--label-2); text-align: center; }
+  .empty { padding: 20px 20px 28px; color: var(--label-2); text-align: center; }
   .empty a { display: inline-block; margin-top: 6px; color: var(--accent); font-weight: 600; text-decoration: none; }
+  header { padding: 16px 18px 12px; gap: 10px; }
+  header b { display: flex; align-items: center; }
+  #count { padding: 2px 6px; border-radius: 6px; background: var(--fill); font-size: 11px; }
+  #help { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--sep); background: none; font-size: 14px; }
+  #exports { position: relative; }
+  #exports[hidden] { display: none; }
+  summary { cursor: pointer; list-style: none; padding: 6px 10px; border-radius: 7px; background: var(--fill); font-size: 12px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: ' ▾'; color: var(--label-2); }
+  .export-menu { position: absolute; right: 0; top: calc(100% + 6px); width: 176px; padding: 5px; border: 1px solid var(--sep); border-radius: 10px; background: var(--card); box-shadow: 0 8px 24px #0003; }
+  .export-menu button { display: block; width: 100%; padding: 10px; text-align: left; border-radius: 6px; background: none; color: var(--label); }
+  .export-menu button:hover { background: var(--fill); }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  ul { margin: 0 12px 12px; }
+  ul.is-empty { background: none; }
+  li { padding: 16px 40px 16px 16px; overflow-wrap: anywhere; }
+  .text { font-size: 15px; line-height: 1.5; }
+  .tag { background: var(--fill); color: var(--label-2); font-size: 10px; }
+  .meaning { margin-top: 6px; }
+  .context { margin-top: 8px; padding-left: 8px; border-left: 2px solid var(--sep); color: var(--label-2); font-size: 12px; }
+  .src { margin-top: 10px; color: var(--label-2); font-size: 11px; }
+  .del { top: 16px; opacity: 0.55; background: none; }
+  .empty-icon { display: block; font-size: 32px; line-height: 1; color: var(--label-2); margin-bottom: 16px; }
+  .empty h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: var(--label); }
+  .empty p { max-width: 280px; margin: 0 auto 12px; line-height: 1.7; }
+  @media (prefers-color-scheme: dark) { :root { --card: #242426; } }
 </style>
 <header>
-  <b><span id="title">저장한 단어·문장</span><span id="count"></span></b>
-  <a id="help" href="help.html" target="_blank" title="기능과 단축키 설명">사용법</a>
-  <button id="csv" title="엑셀·구글 시트용">CSV</button>
-  <button id="anki" title="Anki: 파일 → 가져오기">Anki</button>
+  <b><span id="title">저장함</span><span id="count"></span></b>
+  <a id="help" href="help.html" target="_blank" title="기능과 단축키 설명" aria-label="사용법">?</a>
+  <details id="exports" hidden>
+    <summary id="export-label">내보내기</summary>
+    <div class="export-menu">
+      <button id="csv" title="엑셀·구글 시트용">CSV</button>
+      <button id="anki" title="Anki: 파일 → 가져오기">Anki</button>
+    </div>
+  </details>
 </header>
 <ul id="list"></ul>
 <script src="lib.js"></script>

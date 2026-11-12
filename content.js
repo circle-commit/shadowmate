@@ -1,7 +1,7 @@
 // Runs in the page itself ("world": "MAIN") at document_start, so JSON.parse is wrapped before Netflix's player loads
 // and netflix.appContext (the player API) is reachable.
 (() => {
-  const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, lemmaCandidates,
+  const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates,
     DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates, t, defaultLangs, dictLink, DICTS } = DualSub;
   // TTML profiles, best first. imsc1.1 is the only text one for Korean/Japanese/Chinese; nflx-cmisc is images.
   const FORMATS = ['imsc1.1', 'dfxp-ls-sdh', 'simplesdh'];
@@ -101,12 +101,12 @@
       const [oc, tc] = await Promise.all([o && o.url ? fetchCues(o.url) : [], t && t.url ? fetchCues(t.url) : []]);
       if (gen !== loadGen || movieId() !== id) return; // a newer load() or another title took over
       if (oc !== cues) { armed = -1; stuck = null; jumpedUntil = 0; dropTake(); } // old indexes are meaningless
-      const english = !!o && o.lang.toLowerCase().split('-')[0] === 'en';
+      const lang = o ? o.lang.toLowerCase().split('-')[0] : 'en';
       // Same original line list (a manifest refresh or a translation change): keep the shown line and an open popup.
-      const same = oc === cues && english === origIsEnglish;
+      const same = oc === cues && lang === origLang;
       cues = oc;
       trans = pairCues(oc, tc);
-      origIsEnglish = english;
+      origLang = lang;
       transLang = t ? t.lang : ''; // the word popup's dictionary explains in this language
       renderCues();
       if (same) {
@@ -372,7 +372,10 @@
   function toggleOff() {
     prefs.off = !prefs.off;
     save();
-    if (prefs.off) { closePopup(); cancelRecord(); stopCompare(); } // nothing of ours left on screen or recording
+    if (prefs.off) {
+      if (slow) endSlow(); // tick() skips playback cleanup while the panel is hidden
+      closePopup(); cancelRecord(); stopCompare();
+    }
     toast(prefs.off ? t('subsOff', keyLabel(prefs.keys.off)) : t('subsOn'));
   }
 
@@ -652,7 +655,7 @@
   // request a browser makes.)
   const WIKTIONARY = 'https://en.wiktionary.org/api/rest_v1/page/definition/';
   const entries = new Map(); // word -> Promise of {word, meanings} or null
-  let origIsEnglish = false, transLang = '', popupSpans = null; // popupSpans: the looked-up words' spans
+  let origLang = 'en', transLang = '', popupSpans = null; // popupSpans: the looked-up words' spans
   // Wiktionary HTML to text, minus inline <style> (TemplateStyles CSS) and nested sub-sense lists (the API also lists
   // those as their own definitions).
   function htmlText(html) {
@@ -662,25 +665,27 @@
   }
 
   function entry(word) {
-    if (!entries.has(word)) {
-      entries.set(word, nativeFetch(WIKTIONARY + encodeURIComponent(word.replace(/ /g, '_')), { signal: AbortSignal.timeout(8000) })
+    const lang = origLang, key = `${lang} ${word}`;
+    if (!entries.has(key)) {
+      entries.set(key, nativeFetch(WIKTIONARY + encodeURIComponent(word.replace(/ /g, '_')), { signal: AbortSignal.timeout(8000) })
         .then(res => {
           if (res.status === 404) return null;
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json();
         })
-        .then(json => json && trimEntry(word, json.en))
-        .catch(e => { entries.delete(word); throw e; }));
+        .then(json => json && trimEntry(word, wiktionarySenses(json, lang)))
+        .catch(e => { entries.delete(key); throw e; }));
     }
-    return entries.get(word);
+    return entries.get(key);
   }
 
-  // Up to 3 senses with 2 definitions each. The API's "en" list starts with Translingual senses (letters, symbols,
-  // ISO language codes: "the" opens with one), so keep the English ones when there are any. `formOnly` marks pages
-  // that just point at another form ("plural of city"), so define() can keep looking for the real word.
+  // Up to 3 senses with 2 definitions each, written in English whatever the word's language. The API's "en" list starts
+  // with Translingual senses (letters, symbols, ISO language codes: "the" opens with one), so keep the others when
+  // there are any. `formOnly` marks pages that just point at another form ("plural of city"), so define() can go on to
+  // the real word. `lemma` is that form, also on pages with other senses (Spanish "echo": a noun, and a form of echar).
   function trimEntry(word, senses) {
-    const english = (senses || []).filter(s => s.language === 'English');
-    const meanings = (english.length ? english : senses || []).map(s => ({
+    const own = senses.filter(s => s.language !== 'Translingual');
+    const meanings = (own.length ? own : senses).map(s => ({
       pos: s.partOfSpeech || '',
       defs: (s.definitions || []).map(d => ({
         text: htmlText(d.definition),
@@ -688,34 +693,30 @@
         formOf: /form-of-definition/.test(d.definition || ''),
       })).filter(d => d.text).slice(0, 2),
     })).filter(m => m.defs.length).slice(0, 3);
-    return meanings.length ? { word, meanings, formOnly: meanings.every(m => m.defs.every(d => d.formOf)) } : null;
+    if (!meanings.length) return null;
+    const formOnly = meanings.every(m => m.defs.every(d => d.formOf));
+    const lemma = senses.flatMap(s => s.definitions || []).map(d => new DOMParser()
+      .parseFromString(d.definition || '', 'text/html').querySelector('.form-of-definition-link a')?.title).find(Boolean);
+    return { word, meanings, formOnly, lemma };
   }
 
-  // Titles to try for one clicked word: lowercase as written, then stripped forms, then the original capitalization
-  // (page titles are case-sensitive, so names like "Scranton" only match as written, also from "Scranton's").
-  // The pronoun goes first as written, since the page "i" is the letter.
-  function wordCandidates(word) {
-    const asWritten = word.replace(/’/g, "'");
-    return [...new Set([...(/^I('|$)/.test(asWritten) ? [asWritten] : []),
-      ...lemmaCandidates(word), asWritten, asWritten.replace(/'s$/, '')])];
-  }
-
-  // The first title Wiktionary really defines. A page that only says "plural of city" is kept as a fallback while
-  // the remaining titles (city) are tried.
+  // The first title Wiktionary really defines. A page that only says "plural of city" leads to the word it names, and
+  // is kept as a fallback while the remaining titles are tried.
   // One failed title doesn't end the search; the error shows only when nothing at all was found.
   async function define(tries) {
     let fallback = null, error = null;
     for (const w of tries) {
       const e = await entry(w).catch(err => { error = err; return null; });
       if (e && !e.formOnly) return { entry: e };
+      const base = e && e.lemma ? await entry(e.lemma).catch(() => null) : null;
+      if (base && !base.formOnly) return { entry: base };
       fallback = fallback || e;
     }
     return fallback || !error ? { entry: fallback } : { error };
   }
 
-  // The dictionary is English-only, so only an English original line gets clickable words.
   function renderOrig(text) {
-    const parts = origIsEnglish ? splitWords(text) : text ? [{ text }] : [];
+    const parts = splitWords(text, origLang);
     origEl.replaceChildren(...parts.map(p => p.word ? el('span', { className: 'ds-word' }, p.text) : p.text));
   }
 
@@ -751,22 +752,23 @@
   origEl.addEventListener('pointerup', e => endWordDrag(e, true));
   origEl.addEventListener('pointercancel', e => endWordDrag(e, false));
 
-  // 뜻 번역: Chrome's built-in Translator puts the English definitions into the translation subtitles' language on
-  // this computer (only its one-time language model download uses the network). Other browsers, or an unsupported
-  // language pair: English only.
-  const translators = new Map(); // language -> Promise<Translator | null>
+  // 뜻 번역: Chrome's built-in Translator puts the English definitions (and the original word, from its own language)
+  // into the translation subtitles' language on this computer (only its one-time language model download uses the
+  // network). Other browsers, or an unsupported language pair: no translation.
+  const translators = new Map(); // "from to" -> Promise<Translator | null>
   let modelNote = null; // the open popup's "downloading the model" line
-  function translatorFor(to) {
-    if (!to || to === 'en' || typeof Translator === 'undefined') return Promise.resolve(null);
-    if (!translators.has(to)) {
-      const opts = { sourceLanguage: 'en', targetLanguage: to };
-      translators.set(to, Translator.availability(opts)
+  function translatorFor(from, to) {
+    if (!to || to === from || typeof Translator === 'undefined') return Promise.resolve(null);
+    const key = `${from} ${to}`;
+    if (!translators.has(key)) {
+      const opts = { sourceLanguage: from, targetLanguage: to };
+      translators.set(key, Translator.availability(opts)
         .then(a => a === 'unavailable' ? null : Translator.create({ ...opts, monitor: m => m.addEventListener('downloadprogress', e => {
           if (modelNote) modelNote.textContent = e.loaded < 1 ? t('modelLoading', Math.round(e.loaded * 100)) : '';
         }) }))
-        .catch(e => { translators.delete(to); log('translator', e); return null; })); // e.g. no click to allow the download: next time
+        .catch(e => { translators.delete(key); log('translator', e); return null; })); // e.g. no click to allow the download: next time
     }
-    return translators.get(to);
+    return translators.get(key);
   }
 
   async function openLookup(spans) {
@@ -780,22 +782,31 @@
       // Netflix pauses asynchronously: hold this line (as auto-pause does) so the next one can't replace it meanwhile.
       stuck = stuck || { i: shown, at: clock(v), sawPause: false };
     }
-    const words = spans.map(sp => sp.textContent), text = words.join(' ');
+    const words = spans.map(sp => sp.textContent), text = joinWords(words, origLang);
     // Asked for now, inside the click: downloading the model the first time needs the user's gesture.
-    const code = (transLang || '').toLowerCase().split('-')[0];
-    const trP = translatorFor(code === 'zh' ? transLang : code);
+    const code = (transLang || '').toLowerCase().split('-')[0], to = code === 'zh' ? transLang : code;
+    const defsP = translatorFor('en', to), lineP = translatorFor(origLang, to);
     const head = el('div', { className: 'ds-pop-head' }, el('b', {}, text));
     const body = el('div', { className: 'ds-pop-body' }, t('lookingUp'));
     const link = (href, label, className) => el('a', { className, href, target: '_blank', rel: 'noopener noreferrer' }, label);
     const source = link(`https://en.wiktionary.org/wiki/${encodeURIComponent(text.toLowerCase())}`, 'Wiktionary', 'ds-pop-src');
     // [site, URL]: chosen in ⚙ or picked for the translation's language (the browser's without a translation)
-    const dict = dictLink(text, 'en', transLang || navigator.language, prefs.dict);
+    const dict = dictLink(text, origLang, transLang || navigator.language, prefs.dict);
     modelNote = el('div', { className: 'ds-pop-note' });
     popup.replaceChildren(head, body, modelNote, el('div', { className: 'ds-pop-foot' },
       link(dict[1], t('dictLink', dict[0]), 'ds-pop-link'), source));
     popup.hidden = false;
     placePopup();
-    const { entry, error } = await define(phrase ? phraseCandidates(words) : wordCandidates(text));
+    // Japanese verbs come out of the segmenter in pieces (食 / べ), so the piece right after this one is tried with it.
+    const next = spans[0].nextSibling;
+    const joined = !phrase && origLang === 'ja' && next && next.classList && next.classList.contains('ds-word') ? [text + next.textContent] : [];
+    let found = await define(phrase ? phraseCandidates(words, origLang) : [...joined, ...wordCandidates(text, origLang)]);
+    if (phrase && !found.entry && origLang !== 'en' && text.includes(' ')) { // "echo de menos" -> "echar de menos"
+      const base = (await define(wordCandidates(words[0], origLang))).entry;
+      const again = base && await define(phraseCandidates([base.lemma || base.word, ...words.slice(1)], origLang));
+      if (again && again.entry) found = again;
+    }
+    const { entry, error } = found;
     if (popupSpans !== spans) return; // closed, or another lookup started meanwhile
     if (entry) {
       head.replaceChildren(el('b', {}, entry.word));
@@ -816,17 +827,17 @@
     head.append(wordStar);
     updateStars();
     placePopup();
-    const tr = await trP;
-    if (!tr || popupSpans !== spans || error) return;
+    const [defsTr, lineTr] = await Promise.all([defsP, lineP]);
+    if (popupSpans !== spans || error) return;
     try {
       if (entry) { // the headword and each definition; the English stays underneath
-        const defs = [...body.querySelectorAll('.ds-pop-def')];
-        const out = await Promise.all([entry.word, ...defs.map(d => d.textContent)].map(s => tr.translate(s)));
+        const defs = defsTr ? [...body.querySelectorAll('.ds-pop-def')] : [];
+        const [word, ...out] = await Promise.all([lineTr && lineTr.translate(entry.word), ...defs.map(d => defsTr.translate(d.textContent))]);
         if (popupSpans !== spans) return;
-        head.querySelector('b').append(el('span', { className: 'ds-pop-tr' }, out[0]));
-        defs.forEach((d, k) => { const en = d.textContent; d.textContent = out[k + 1]; d.append(el('div', { className: 'ds-pop-en' }, en)); });
-      } else { // not in the dictionary: at least a machine translation
-        const out = await tr.translate(text);
+        if (word) head.querySelector('b').append(el('span', { className: 'ds-pop-tr' }, word));
+        defs.forEach((d, k) => { const en = d.textContent; d.textContent = out[k]; d.append(el('div', { className: 'ds-pop-en' }, en)); });
+      } else if (lineTr) { // not in the dictionary: at least a machine translation
+        const out = await lineTr.translate(text);
         if (popupSpans !== spans) return;
         body.append(el('div', { className: 'ds-pop-mt' }, out, el('span', { className: 'ds-pop-note' }, ` · ${t('machine')}`)));
       }

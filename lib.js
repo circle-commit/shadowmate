@@ -97,8 +97,27 @@ const DualSub = (() => {
   }
 
   // "I'm here." -> I'm / " " / here / "." with word: true on the words, so each word can be its own click target.
-  const splitWords = text => text.split(/(\p{L}+(?:['’]\p{L}+)*)/u)
-    .map((t, i) => ({ text: t, word: i % 2 === 1 })).filter(p => p.text);
+  // Intl.Segmenter also finds words in languages written without spaces (Japanese, Chinese, Thai).
+  function splitWords(text, lang = 'en') {
+    const out = [];
+    for (const { segment, isWordLike } of new Intl.Segmenter(lang, { granularity: 'word' }).segment(text)) {
+      const word = isWordLike && /\p{L}/u.test(segment), last = out[out.length - 1];
+      if (!word && last && !last.word) last.text += segment;
+      else out.push({ text: segment, word });
+    }
+    return out;
+  }
+
+  // Dragged words back into a phrase, in languages written without spaces too.
+  const joinWords = (words, lang) => words.join(/^(ja|zh|th|lo|km|my)$/.test(lang) ? '' : ' ');
+
+  // A word's senses in Wiktionary's reply, which lists them by Wiktionary's language codes. Norwegian has none: it's
+  // under "other", by name.
+  const WIKTIONARY_CODE = { fil: 'tl', hr: 'sh', sr: 'sh', bs: 'sh', cmn: 'zh', yue: 'zh' };
+  function wiktionarySenses(json, lang) {
+    if (lang === 'nb' || lang === 'no') return (json.other || []).filter(s => s.language === 'Norwegian Bokmål');
+    return json[WIKTIONARY_CODE[lang] || lang] || [];
+  }
 
   // Dictionary forms to try for a clicked word, as written first: "planning" -> planning, plann, plan.
   // shortcut: suffix stripping, not a real lemmatizer; irregular forms (went, children) only hit if listed as words.
@@ -116,6 +135,22 @@ const DualSub = (() => {
       add(/([^aeiou])\1$/.test(stem) ? stem.slice(0, -1) : stem + 'e'); // stopped -> stop, loved -> love
     }
     return out.slice(0, 4);
+  }
+
+  // Titles to try for one clicked word: lowercase as written, then stripped forms, then the original capitalization
+  // (page titles are case-sensitive, so names like "Scranton" only match as written, also from "Scranton's").
+  // The pronoun goes first as written, since the page "i" is the letter.
+  // Other languages need no suffix rules: Wiktionary lists their inflected forms and names the base word.
+  // shortcut: Korean only loses its particles; conjugated verbs (먹었어요) get the machine translation.
+  const KO_PARTICLE = /(?<=.)(에서|에게|한테|까지|부터|으로|은|는|이|가|을|를|와|과|도|만|의|에|로)$/u;
+  function wordCandidates(word, lang = 'en') {
+    const asWritten = word.replace(/’/g, "'");
+    if (lang === 'en') return [...new Set([...(/^I('|$)/.test(asWritten) ? [asWritten] : []),
+      ...lemmaCandidates(word), asWritten, asWritten.replace(/'s$/, '')])];
+    const lower = asWritten.toLocaleLowerCase(lang);
+    return [...new Set([lower, asWritten,
+      /^(fr|it|ca)$/.test(lang) ? lower.replace(/^.*'/, '') : lower, // l'homme -> homme
+      lang === 'ko' ? lower.replace(KO_PARTICLE, '') : lower])];
   }
 
   // Saved items ({type: 'word'|'sentence', text, meaning, sentence, translation, title, time, savedAt}) for export.
@@ -159,8 +194,12 @@ const DualSub = (() => {
   // Titles are case-sensitive: lowercase except the pronoun I ("I mean"), and names ("New York") last, as written.
   const OBJECT = new Set(['me', 'you', 'him', 'her', 'us', 'them']);
   const POSSESSIVE = new Set(['my', 'your', 'his', 'her', 'our', 'their']);
-  function phraseCandidates(words) {
+  function phraseCandidates(words, lang = 'en') {
     const asWritten = words.map(w => w.replace(/’/g, "'"));
+    if (lang !== 'en') { // the pronoun rules below are English's
+      const text = joinWords(asWritten, lang);
+      return [...new Set([text.toLocaleLowerCase(lang), text])];
+    }
     const ws = asWritten.map(w => (/^I('|$)/.test(w) ? w : w.toLowerCase()));
     const general = ws.map(w => (OBJECT.has(w) ? 'someone' : POSSESSIVE.has(w) ? "one's" : w));
     const bases = lemmaCandidates(ws[0]).slice(1, 3);
@@ -224,7 +263,9 @@ const DualSub = (() => {
       savePhrase: '표현 저장', saveWord: '단어 저장', copied: '문장을 복사했어요', copyFailed: '복사하지 못했어요',
       modelLoading: '번역 모델 받는 중… {0}%', machine: '기계 번역',
       dictLink: '{0}에서 보기 ↗', dictLabel: '사전 ', dictAuto: '자동 (언어에 맞게)',
-      savedTitle: 'Shadowmate 저장함', savedHeader: '저장한 단어·문장', count: ' {0}개', guide: '사용법', guideTitle: '기능과 단축키 설명',
+      savedTitle: 'Shadowmate 저장함', savedHeader: '저장함', count: '{0}개', guide: '사용법', guideTitle: '기능과 단축키 설명',
+      exportLabel: '내보내기', emptyHeading: '기억하고 싶은 표현을 모아보세요',
+      emptyDescription: '자막이나 단어 뜻 창에서 ☆를 누르면 여기에 저장돼요.', saveGuide: '저장하는 방법 보기',
       guidePage: 'help.html', csvTitle: '엑셀·구글 시트용', ankiTitle: 'Anki: 파일 → 가져오기',
       empty: '아직 없어요. 넷플릭스에서 문장 옆 ☆나 단어 뜻 창의 ☆를 누르세요.', openGuide: '사용법 보기',
       tagWord: '단어', tagLine: '문장', del: '삭제',
@@ -254,13 +295,20 @@ const DualSub = (() => {
       savePhrase: 'Save phrase', saveWord: 'Save word', copied: 'Line copied', copyFailed: 'Couldn’t copy',
       modelLoading: 'Downloading the translation model… {0}%', machine: 'machine translation',
       dictLink: 'Open in {0} ↗', dictLabel: 'Dictionary ', dictAuto: 'Auto (by language)',
-      savedTitle: 'Shadowmate saved', savedHeader: 'Saved words & lines', count: ' {0}', guide: 'Guide', guideTitle: 'Features and shortcuts',
+      savedTitle: 'Shadowmate saved', savedHeader: 'Saved', count: '{0}', guide: 'Guide', guideTitle: 'Features and shortcuts',
+      exportLabel: 'Export', emptyHeading: 'Keep the expressions you want to remember',
+      emptyDescription: 'Select ☆ beside a subtitle or in a word’s definition to save it here.', saveGuide: 'Learn how to save',
       guidePage: 'help.en.html', csvTitle: 'For Excel and Google Sheets', ankiTitle: 'Anki: File → Import',
       empty: 'Nothing yet. On Netflix, press ☆ next to a line or in a word’s popup.', openGuide: 'Open the guide',
       tagWord: 'Word', tagLine: 'Line', del: 'Delete',
     },
   };
   const uiLang = lang => (/^ko\b/i.test(lang || '') ? 'ko' : 'en');
+  function guidePage(lang) {
+    const base = (lang || '').toLowerCase().split('-')[0];
+    return base === 'ko' ? 'help.html' : ['ja', 'zh', 'es', 'fr', 'de', 'pt'].includes(base)
+      ? `help.intl.html?lang=${base}` : 'help.en.html';
+  }
   const UI_LANG = uiLang(typeof navigator === 'object' ? navigator.language : '');
   const t = (key, ...args) => (STRINGS[UI_LANG][key] ?? STRINGS.en[key] ?? key).replace(/\{(\d)\}/g, (_, i) => args[i]);
 
@@ -272,8 +320,8 @@ const DualSub = (() => {
   }
 
   // Dictionaries for the word popup's link: [name, URL] for a word in language `from`, explained in language `to` (the
-  // translation subtitles' language, else the browser's). Naver, Daum and Weblio are English dictionaries. `auto`
-  // picks one for `to`.
+  // translation subtitles' language, else the browser's). Naver, Daum, Weblio and Cambridge are English dictionaries,
+  // so a word in another language opens Google Translate, whatever was chosen. `auto` picks one for `to`.
   const DICTS = {
     naver: ['네이버 사전', q => `https://en.dict.naver.com/#/search?query=${q}`],
     daum: ['다음 사전', q => `https://dic.daum.net/search.do?q=${q}&dic=eng`],
@@ -286,13 +334,14 @@ const DualSub = (() => {
   function dictLink(word, from, to, choice) {
     const code = l => (l || '').toLowerCase().split('-')[0];
     const base = code(to) || 'en', src = code(from) || 'en';
-    const key = DICTS[choice] ? choice : { ko: 'naver', ja: 'weblio', en: 'cambridge' }[base] || 'google';
+    const pick = DICTS[choice] ? choice : { ko: 'naver', ja: 'weblio', en: 'cambridge' }[base] || 'google';
+    const key = src === 'en' || pick === 'papago' ? pick : 'google';
     return [DICTS[key][0], DICTS[key][1](encodeURIComponent(word), base, word, src)];
   }
 
-  return { parseTime, parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, lemmaCandidates,
-    formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
-    STRINGS, uiLang, t, defaultLangs, dictLink, DICTS };
+  return { parseTime, parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, lemmaCandidates,
+    wordCandidates, formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
+    STRINGS, uiLang, t, defaultLangs, dictLink, DICTS, guidePage };
 })();
 
 if (typeof module === 'object') module.exports = DualSub;

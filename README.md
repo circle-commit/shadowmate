@@ -2,7 +2,7 @@
 
 (예전 이름: Shadowmate, Netflix DualSub)
 
-넷플릭스 영상 위에 두 언어 자막(예: 영어·일본어·스페인어 + 한국어)을 함께 보여 주고 문장 단위 쉐도잉을 돕는 크롬 확장 프로그램. 단어 뜻 찾기는 현재 영어 원어에서 동작합니다.
+넷플릭스 영상 위에 두 언어 자막(예: 영어·일본어·스페인어 + 한국어)을 함께 보여 주고 문장 단위 쉐도잉을 돕는 크롬 확장 프로그램. 단어·숙어 뜻 찾기도 모든 원어 자막 언어에서 동작합니다.
 
 ## 설치
 
@@ -37,7 +37,7 @@
 | 설정의 `간단히 보기` | 평소엔 자막 두 줄만 어두운 배경 위에 보이고 패널에 마우스를 올리면 버튼·타이밍 바가 나옴 (단축키는 그대로, 기억됨) |
 | 목록 아이콘 | 오른쪽에 전체 자막 목록 (현재 문장 강조, 클릭하면 그 문장으로) |
 | 패널 아래 바 | 대사가 나오는 구간. 가운데 선이 지금, 막대를 누르면 그 문장으로 |
-| 원어 자막의 단어 클릭 | 영영 뜻 팝업 (Wiktionary) + 네이버 사전 링크. 영상은 잠깐 멈춤, `Esc`·바깥 클릭·다음 문장에서 닫힘 |
+| 원어 자막의 단어 클릭 | 뜻 팝업 (Wiktionary, 뜻은 영어로 제공) + 사전 링크 (영어 외의 원어는 구글 번역). 영상은 잠깐 멈춤, `Esc`·바깥 클릭·다음 문장에서 닫힘 |
 | 원어 자막의 여러 단어를 드래그 | 구절·숙어 뜻 (`beat me to the punch` → `beat someone to the punch`처럼 me/my를 someone/one's로 바꿔서도 찾아봄) |
 | 패널의 `☆` | 지금 문장 저장 (★ = 저장됨, 다시 누르면 취소) |
 | 단어 뜻 창의 `☆` | 그 단어·구절을 뜻·문장·번역과 함께 저장 |
@@ -63,7 +63,7 @@ Language Reactor 같은 다른 자막 확장은 꺼 두세요. 같은 `A`/`S`/`D
 - `content.js`는 페이지 안(`"world": "MAIN"`)에서 가장 먼저 실행되어 `JSON.parse`를 감싸고, 넷플릭스 플레이어가 받는 영상 정보에서 언어별 자막 주소(`textTracks`, 2026-06 이전 이름은 `timedtexttracks`)를 꺼냅니다.
 - 두 언어의 TTML 자막을 받아 파싱하고(`lib.js`), 시간이 겹치는 줄끼리 짝지어 보여 줍니다.
 - 넷플릭스는 기본 언어 몇 개만 자막 주소를 주고 나머지는 비워 둡니다. 그런 언어를 고르면 넷플릭스 자막을 잠깐 그 언어로 바꿨다가(그러면 넷플릭스가 주소를 보내 줌) 원래대로 되돌립니다.
-- 단어 뜻은 Wiktionary REST API(무료, 키 없음, CC BY-SA)에서 페이지가 직접 가져옵니다. `cities`처럼 사전에 따로 뜻이 없는 변형된 단어는 `city` 같은 기본형으로 찾아봅니다(영어 원어 자막일 때만).
+- 단어 뜻은 Wiktionary REST API(무료, 키 없음, CC BY-SA)에서 페이지가 직접 가져옵니다. 응답은 언어별로 나뉘어 있어 원어 자막 언어의 뜻만 씁니다. 변형된 단어(`cities`, `casas`, `evler`)는 Wiktionary 페이지가 가리키는 기본형으로 찾아봅니다. 단어 나누기는 `Intl.Segmenter`를 씁니다.
 - 저장은 `bridge.js`(확장 쪽 스크립트)를 거쳐 `chrome.storage.local`에 항목마다 따로 들어갑니다. 페이지 안에서 도는 `content.js`는 크롬 확장 API를 직접 못 쓰기 때문입니다.
 - 광고 요금제의 중간 광고는 같은 `<video>`에서 재생돼서, 광고가 한 번 나온 뒤로는 영상 시간이 광고 길이만큼 앞서갑니다. 그래서 자막 시간은 넷플릭스의 작품 내 위치(`getSegmentTime`)를 기준으로 맞추고, 광고 중에는 패널을 숨깁니다(배속 확장으로 광고를 빨리 넘겨도 마찬가지).
 - 느리게 다시 듣기는 `video.playbackRate`를 바꿉니다. Video Speed Controller(VSC)가 깔려 있으면 VSC가 남이 바꾼 속도를 자기 속도로 되돌려서, VSC의 속도 함수(`window.VSC_controller.actionHandler.adjustSpeed`)로 바꿉니다.
@@ -97,12 +97,12 @@ node dev/store-shots.mjs      # 한국어 → store/
 node dev/store-shots.mjs en   # 영어 → store/en/
 ```
 
-화면 문구는 `lib.js`의 `STRINGS`(한국어·영어)에 있고, 브라우저 언어가 한국어가 아니면 영어로 보입니다. 스토어 이름·요약은 `_locales/`, 영어 등록 글은 `store/listing.en.md`, 영어 개인정보처리방침은 `docs/privacy.en.html`입니다.
+화면 문구는 `lib.js`의 `STRINGS`(한국어·영어)에 있고, 브라우저 언어가 한국어가 아니면 영어로 보입니다. 사용법은 한국어·영어 외에 일본어·중국어 간체·스페인어·프랑스어·독일어·포르투갈어도 지원합니다. 저장함에서 브라우저 언어에 맞는 안내로 연결하고, 각 안내 상단에서 언어를 직접 선택할 수 있습니다. 추가 언어의 안내는 `guide.js`와 `help.intl.html`에서 관리하며, 미지원 언어는 영어로 연결합니다. 스토어 이름·요약은 `_locales/`, 영어 등록 글은 `store/listing.en.md`, 영어 개인정보처리방침은 `docs/privacy.en.html`입니다.
 
 올릴 zip(확장에 필요한 파일만):
 
 ```bash
-zip -X store/shadowmate-$(node -p "require('./manifest.json').version").zip manifest.json lib.js content.js content.css bridge.js saved.html saved.js help.html help.en.html icons/*.png _locales/*/messages.json
+zip -X store/shadowmate-$(node -p "require('./manifest.json').version").zip manifest.json lib.js content.js content.css bridge.js saved.html saved.js help.html help.en.html help.intl.html guide.js icons/*.png _locales/*/messages.json
 ```
 
 문제가 생기면 넷플릭스 탭의 개발자 도구 콘솔에서 `[dualsub]` 로그를 확인하세요.

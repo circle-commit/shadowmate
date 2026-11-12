@@ -9,10 +9,11 @@ import { join } from 'node:path';
 const PORT = 8767, CDP = 9333, ORIGIN = `http://localhost:${PORT}`;
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EN = process.argv[2] === 'en', OUT = EN ? 'store/en' : 'store';
+const EN = process.argv[2] === 'en', PLAIN = process.argv[2] === 'plain'; // plain: no headlines, for social posts
+const OUT = EN ? 'store/en' : PLAIN ? 'store/plain' : 'store';
 mkdirSync(OUT, { recursive: true });
 // Headlines per language: [title, subtitle] for shots 1-5, then the promo tile's tagline.
-const TEXT = EN ? [
+let TEXT = EN ? [
   ['Two subtitles at once', 'The language you learn and your own · any language Netflix has'],
   ['Drag to look up idioms', 'Click a word, drag a phrase · definitions and a dictionary in your language'],
   ['Listen first, check later', 'Hide either line · compact view · auto-pause after every line'],
@@ -27,6 +28,7 @@ const TEXT = EN ? [
   ['저장한 단어는 Anki로', '☆로 모은 단어·문장을 CSV나 Anki로 내보내요'],
   '넷플릭스로 하는<br>외국어 쉐도잉',
 ];
+if (PLAIN) TEXT.forEach((x, i) => { TEXT[i] = Array.isArray(x) ? ['', ''] : x; });
 const LANGS = { orig: 'en', trans: 'ko' }; // the fake page's tracks, whatever the browser language
 
 const server = spawn('python3', ['-m', 'http.server', String(PORT)], { stdio: 'ignore' });
@@ -73,6 +75,7 @@ const stage = (title, sub) => `(async () => {
   document.head.append(s);
   const h = document.createElement('div');
   h.className = 'shot-head';
+  if (!${JSON.stringify(title)}) h.hidden = true;
   h.innerHTML = ${JSON.stringify(title)} + '<small>' + ${JSON.stringify(sub)} + '</small>';
   document.body.append(h);
   const v = document.querySelector('video');

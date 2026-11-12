@@ -1,10 +1,22 @@
 // Toolbar popup logic. Items are written by bridge.js as chrome.storage.local keys "item:<id>".
 const PREFIX = 'item:';
 const { t } = DualSub;
+const guideURL = DualSub.guidePage(navigator.language);
 // Static text in the browser's language (saved.html holds the Korean, shown until this runs).
 document.title = t('savedTitle');
 document.getElementById('title').textContent = t('savedHeader');
-Object.assign(document.getElementById('help'), { textContent: t('guide'), title: t('guideTitle'), href: t('guidePage') });
+Object.assign(document.getElementById('help'), { title: t('guideTitle'), href: guideURL });
+document.getElementById('help').setAttribute('aria-label', t('guide'));
+document.getElementById('export-label').textContent = t('exportLabel');
+const exportsEl = document.getElementById('exports');
+document.addEventListener('click', e => { if (!exportsEl.contains(e.target)) exportsEl.open = false; });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && exportsEl.open) {
+    exportsEl.open = false;
+    document.getElementById('export-label').focus();
+    e.preventDefault();
+  }
+});
 document.getElementById('csv').title = t('csvTitle');
 document.getElementById('anki').title = t('ankiTitle');
 const listEl = document.getElementById('list');
@@ -19,9 +31,15 @@ async function render() {
   const items = await savedItems();
   document.getElementById('count').textContent = t('count', items.length);
   document.getElementById('csv').disabled = document.getElementById('anki').disabled = !items.length;
+  exportsEl.hidden = !items.length;
+  listEl.classList.toggle('is-empty', !items.length);
   if (!items.length) {
-    listEl.replaceChildren(el('li', { className: 'empty' }, t('empty'),
-      el('br'), el('a', { href: t('guidePage'), target: '_blank' }, t('openGuide'))));
+    exportsEl.open = false;
+    const star = el('span', { className: 'empty-icon' }, '☆');
+    star.setAttribute('aria-hidden', 'true');
+    listEl.replaceChildren(el('li', { className: 'empty' }, star,
+      el('h1', {}, t('emptyHeading')), el('p', {}, t('emptyDescription')),
+      el('a', { href: guideURL, target: '_blank' }, t('saveGuide'))));
     return;
   }
   listEl.replaceChildren(...items.map(i => el('li', {},
@@ -34,6 +52,7 @@ async function render() {
 }
 
 function download(name, text) {
+  exportsEl.open = false;
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
   el('a', { href: url, download: name }).click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);

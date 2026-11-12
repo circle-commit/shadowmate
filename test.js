@@ -1,7 +1,14 @@
 // Run: node --test
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseTime, parseTTML, pairCues, cueIndexAt, pickTrack, splitWords, lemmaCandidates, formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates } = require('./lib.js');
+test('guide routes regional browser languages and falls back to English', () => {
+  const { guidePage } = require('./lib.js');
+  for (const lang of ['ja-JP', 'zh-CN', 'es-MX', 'fr-CA', 'de-DE', 'pt-BR', 'pt-PT'])
+    assert.equal(guidePage(lang), `help.intl.html?lang=${lang.split('-')[0]}`);
+  assert.equal(guidePage('ko-KR'), 'help.html');
+  for (const lang of ['en-US', 'it-IT', '', undefined]) assert.equal(guidePage(lang), 'help.en.html');
+});
+const { parseTime, parseTTML, pairCues, cueIndexAt, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates, lemmaCandidates, formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates } = require('./lib.js');
 
 const DFXP = `<?xml version="1.0" encoding="utf-8"?>
 <tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" xmlns:tts="http://www.w3.org/ns/ttml#styling" ttp:tickRate="10000000" xml:lang="en">
@@ -135,6 +142,40 @@ test('splitWords marks words, keeps punctuation and line breaks as plain text', 
   assert.deepEqual(splitWords(''), []);
 });
 
+test('splitWords finds words in every script', () => {
+  const words = (s, lang) => splitWords(s, lang).filter(p => p.word).map(p => p.text);
+  assert.deepEqual(words('你好,我想吃饭', 'zh'), ['你好', '我想', '吃饭']);
+  assert.ok(words('私は学校で', 'ja').includes('学校'));
+  assert.deepEqual(words('สวัสดีครับ', 'th'), ['สวัสดี', 'ครับ']);
+  assert.deepEqual(words('मैं किताब', 'hi'), ['मैं', 'किताब']); // vowel signs stay inside the word
+  assert.deepEqual(words('학교에서 밥을', 'ko'), ['학교에서', '밥을']);
+  assert.deepEqual(words('Room 101', 'en'), ['Room']); // a number is no word to look up
+  assert.equal(splitWords('私は\n学校', 'ja').map(p => p.text).join(''), '私は\n学校');
+});
+
+test('wiktionarySenses reads the language out of the reply', () => {
+  const es = [{ language: 'Spanish' }], sh = [{ language: 'Serbo-Croatian' }], tl = [{ language: 'Tagalog' }];
+  const nb = { language: 'Norwegian Bokmål' }, json = { es, sh, tl, other: [{ language: 'Old Saxon' }, nb] };
+  assert.equal(wiktionarySenses(json, 'es'), es);
+  assert.equal(wiktionarySenses(json, 'hr'), sh);
+  assert.equal(wiktionarySenses(json, 'fil'), tl);
+  assert.deepEqual(wiktionarySenses(json, 'nb'), [nb]);
+  assert.deepEqual(wiktionarySenses(json, 'de'), []); // the title exists, only in other languages
+});
+
+test('joinWords and wordCandidates follow the language', () => {
+  assert.equal(joinWords(['食べ', 'る'], 'ja'), '食べる');
+  assert.equal(joinWords(['tener', 'en', 'cuenta'], 'es'), 'tener en cuenta');
+  assert.deepEqual(wordCandidates('Häuser', 'de'), ['häuser', 'Häuser']);
+  assert.deepEqual(wordCandidates("l’homme", 'fr'), ["l'homme", 'homme']);
+  assert.deepEqual(wordCandidates('학교에서', 'ko'), ['학교에서', '학교']);
+  assert.deepEqual(wordCandidates('이', 'ko'), ['이']); // a one-syllable word isn't all particle
+  assert.deepEqual(wordCandidates('Isparta', 'tr'), ['ısparta', 'Isparta']); // Turkish dotless i
+  assert.ok(wordCandidates('cities').includes('city')); // English keeps its suffix rules
+  assert.equal(wordCandidates("I'm")[0], "I'm");
+  assert.deepEqual(phraseCandidates(['Tener', 'en', 'cuenta'], 'es'), ['tener en cuenta', 'Tener en cuenta']);
+});
+
 test('lemmaCandidates tries the word as written, then common dictionary forms', () => {
   assert.deepEqual(lemmaCandidates('Planning'), ['planning', 'plann', 'plan']);
   assert.deepEqual(lemmaCandidates('stopped'), ['stopped', 'stopp', 'stop']);
@@ -230,5 +271,9 @@ test('UI text exists in Korean and English, picked by browser language', () => {
   assert.match(dictLink('city', 'en', 'ko', 'nope')[1], /naver/); // unknown choice: back to auto
   // translators go from the original's language to the translation's
   assert.match(dictLink('city', 'en-US', 'ja', 'google')[1], /sl=en&tl=ja/);
+  // English dictionaries can't look up other languages, chosen or not
+  assert.match(dictLink('casa', 'es', 'ko')[1], /translate\.google\.com.*sl=es&tl=ko/);
+  assert.match(dictLink('casa', 'es-ES', 'en', 'cambridge')[1], /sl=es&tl=en/);
+  assert.match(dictLink('casa', 'es', 'ko', 'papago')[1], /papago.*sk=es&tk=ko/);
   assert.match(dictLink('city', 'en', 'zh-Hans', 'papago')[1], /sk=en&tk=zh/);
 });

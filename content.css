@@ -203,7 +203,9 @@
    has keyboard focus. The hidden controls keep their space, so the lines don't move when they fade in. */
 #dualsub-panel { transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s; }
 #dualsub-panel :is(.ds-nav, .ds-side, .ds-barrow) { transition: opacity 0.2s; }
-#dualsub-panel .ds-lines { border-radius: calc(10px * var(--ds-scale)); transition: background-color 0.2s; }
+#dualsub-panel .ds-hint { transition: background-color 0.2s; }
+#dualsub-panel :is(.ds-orig, .ds-trans, .ds-hint) { border-radius: calc(8px * var(--ds-scale)); }
+#dualsub-panel.ds-compact :is(.ds-trans, .ds-hint) { margin-top: calc(10px * var(--ds-scale)); } /* room between the boxes */
 #dualsub-panel.ds-compact:not(:hover, :has(.ds-settings:not([hidden]), :focus-visible, .ds-rec.on)) { /* recording: show the red mic */
   border-color: transparent;
   background: transparent;
@@ -211,20 +213,29 @@
   backdrop-filter: none;
   box-shadow: none;
   & :is(.ds-nav, .ds-side, .ds-barrow, .ds-resize) { opacity: 0; }
-  /* Apple TV-style dark box hugging the lines, so white text stays readable on bright scenes. The negative margin
-     cancels the padding, so the lines stay put; no box between lines (all three children empty). */
-  & .ds-lines:has(> :not(:empty)) {
-    justify-self: center;
-    margin: calc(-5px * var(--ds-scale)) 0;
-    padding: calc(5px * var(--ds-scale)) calc(14px * var(--ds-scale));
-    background: rgba(0, 0, 0, 0.62);
+  /* Apple TV-style dark box hugging each line, so white text stays readable on bright scenes. The negative margins
+     cancel the padding, so the lines stay put; an empty line has no box (it isn't displayed). */
+  & .ds-lines:has(> :not(:empty)) { justify-self: center; }
+  & :is(.ds-orig, .ds-trans, .ds-hint) {
+    width: fit-content;
+    margin-inline: auto;
+    padding: calc(3px * var(--ds-scale)) calc(14px * var(--ds-scale));
+    background: rgba(0, 0, 0, 0.8);
   }
+  & .ds-orig { margin-block: calc(-3px * var(--ds-scale)); }
+  & :is(.ds-trans, .ds-hint) { margin-block: calc(7px * var(--ds-scale)) calc(-3px * var(--ds-scale)); }
   & .ds-trans { color: rgba(255, 255, 255, 0.82); }
+  /* A hidden line blurs only its text here: filter would smear the box too. */
+  #dualsub-root.ds-hide-orig & .ds-orig:not(:hover), #dualsub-root.ds-hide-trans & .ds-trans:not(:hover) {
+    filter: none;
+    color: transparent;
+    text-shadow: 0 0 0.6em #fff;
+  }
 }
 
 /* 원문·번역 가리기 (⚙, W/E): blur those lines in the panel and the list until the pointer is on one.
    em: the blur follows each line's own size (panel scale, smaller list text). */
-#dualsub-root :is(.ds-orig, .ds-trans, .ds-item-orig, .ds-item-trans) { transition: filter 0.15s; }
+#dualsub-root :is(.ds-orig, .ds-trans, .ds-item-orig, .ds-item-trans) { transition: filter 0.15s, background-color 0.2s; }
 #dualsub-root.ds-hide-orig :is(.ds-orig, .ds-item-orig):not(:hover),
 #dualsub-root.ds-hide-trans :is(.ds-trans, .ds-item-trans):not(:hover) { filter: blur(0.3em); }
 
