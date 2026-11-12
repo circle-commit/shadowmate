@@ -143,14 +143,38 @@ const DualSub = (() => {
   // Other languages need no suffix rules: Wiktionary lists their inflected forms and names the base word.
   // shortcut: Korean only loses its particles; conjugated verbs (먹었어요) get the machine translation.
   const KO_PARTICLE = /(?<=.)(에서|에게|한테|까지|부터|으로|은|는|이|가|을|를|와|과|도|만|의|에|로)$/u;
-  function wordCandidates(word, lang = 'en') {
+  // sentenceStart: the word opens a sentence (see startsSentence), so its capital says nothing about it.
+  function wordCandidates(word, lang = 'en', { sentenceStart = false } = {}) {
     const asWritten = word.replace(/’/g, "'");
     if (lang === 'en') return [...new Set([...(/^I('|$)/.test(asWritten) ? [asWritten] : []),
       ...lemmaCandidates(word), asWritten, asWritten.replace(/'s$/, '')])];
     const lower = asWritten.toLocaleLowerCase(lang);
+    // German capitalizes every noun, and many have a lowercase twin (Weg "way" / weg "away", Morgen "morning" /
+    // morgen "tomorrow"): inside a sentence, the word as written first. Opening one, every word is capitalized and
+    // Wiktionary has capitalized pages for many lowercase words (Ich "ego", Heute "today" as a noun), so lowercase
+    // first, as in other languages; the capital still comes next (Haus has no "haus" page in German).
+    if (lang === 'de') return [...new Set(sentenceStart ? [lower, asWritten] : [asWritten, lower])];
     return [...new Set([lower, asWritten,
       /^(fr|it|ca)$/.test(lang) ? lower.replace(/^.*'/, '') : lower, // l'homme -> homme
       lang === 'ko' ? lower.replace(KO_PARTICLE, '') : lower])];
+  }
+
+  // Whether a word whose line reads `before` up to it opens a sentence:
+  // - first in the cue, also after what opens a line without being words: ♪ (any symbol) and sound notes [Musik] (lacht);
+  //   a cue's second line only opens a sentence after a mark, a dash or the punctuation below
+  // - after . ! ? … or : (closing quotes or brackets after those too)
+  // - after a dialogue dash opening a line (a new speaker, whatever came before: "Ja,\n- Ich"); one inside the line
+  //   changes nothing ("Ja! - Ich" opens one, "Ja – ich" doesn't)
+  // Quotes or brackets right against the word open it and don't count, » › too (German »Ich komme«).
+  // shortcut: a sentence going on from the previous line counts as opening; so does a word after an abbreviation (z. B.).
+  function startsSentence(before) {
+    const b = before.replace(/[\p{Ps}\p{Pi}"'„«‹»›]+$/u, '');
+    // A dialogue dash opening the line, also before a speaker's or sound note and marks: "-[Mutter] Es", "- (lacht) Ich".
+    if (/(?:^|\n)[^\S\n]*[-‐–—](?:\s|\p{So}|\[[^\]\n]*\]|\([^)\n]*\))*$/u.test(b)) return true;
+    // The cue's start, also after marks; a new line inside the cue only when it opens with a mark (a line break alone
+    // goes on with the sentence: "Ich sehe den\nWeg nicht"), else by the dash and punctuation rules.
+    return /^(?:\s|\p{So}|\[[^\]\n]*\]|\([^)\n]*\))*$|\n[^\S\n]*(?:\p{So}|\[[^\]\n]*\]|\([^)\n]*\))(?:\s|\p{So}|\[[^\]\n]*\]|\([^)\n]*\))*$|[.!?…:][\p{Pe}\p{Pf}"'»›«‹“‘]*\s+$/u
+      .test(b.replace(/\s[-‐–—]\s*$/u, ' '));
   }
 
   // Saved items ({type: 'word'|'sentence', text, meaning, sentence, translation, title, time, savedAt}) for export.
@@ -169,15 +193,18 @@ const DualSub = (() => {
       if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
       return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const rows = [['type', 'text', 'meaning', 'sentence', 'translation', 'title', 'time', 'saved_at'],
+    // lang last, so a sheet or import set up for the older columns still lines up; empty for older items (no lang).
+    const rows = [['type', 'text', 'meaning', 'sentence', 'translation', 'title', 'time', 'saved_at', 'lang'],
       ...items.map(i => [i.type, i.text, i.meaning, i.sentence, i.translation, i.title, formatTime(i.time, true),
-        new Date(i.savedAt).toISOString()])];
+        new Date(i.savedAt).toISOString(), i.lang])];
     return '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
   }
 
   // Anki "Import File": tab-separated Front / Back / Tags with Anki's header lines. Fields are HTML, so text is
   // escaped (quotes too, or Anki's parser would take a leading " as a quoted field).
   function toAnki(items) {
+    // A tag per language too (dualsub-de); older items have none. Anki splits tags on spaces.
+    const tags = i => `dualsub dualsub-${i.type}` + (typeof i.lang === 'string' && /^[\w-]+$/.test(i.lang) ? ` dualsub-${i.lang}` : '');
     const html = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/\t/g, ' ').replace(/\r?\n/g, '<br>');
     const back = i => i.type === 'word'
@@ -185,7 +212,7 @@ const DualSub = (() => {
       : html(i.meaning);
     return ['#separator:tab', '#html:true', '#tags column:3',
       // A row starting with # would be read as a comment and dropped; &#35; still shows as #.
-      ...items.map(i => [html(i.text).replace(/^#/, '&#35;'), back(i), `dualsub dualsub-${i.type}`].join('\t'))].join('\n') + '\n';
+      ...items.map(i => [html(i.text).replace(/^#/, '&#35;'), back(i), tags(i)].join('\t'))].join('\n') + '\n';
   }
 
   // Dictionary titles to try for a dragged phrase. Wiktionary lists idioms in a general form ("beat someone to the
@@ -243,6 +270,9 @@ const DualSub = (() => {
       hintTurnOn: '넷플릭스 자막 메뉴에서 {0} 자막을 한 번 켜 주세요',
       hintLoading: '{0} 자막 불러오는 중…',
       hintFailed: '자막을 불러오지 못했어요 (콘솔의 [dualsub] 로그 확인)',
+      hintTransFailed: '{0} 번역 자막을 불러오지 못해 원어 자막만 보여요 (콘솔의 [dualsub] 로그 확인)',
+      hintNoTrans: '이 작품엔 {0} 번역 자막이 없어요',
+      hintNoManifest: '이 작품의 자막 정보를 찾지 못했어요. 페이지를 새로고침해 보세요',
       repeatOn: '문장 반복 {0}번', repeatOff: '문장 반복 끔', repeatBtn: '반복', repeatProgress: '반복 {0}/{1}',
       micNotFound: '마이크를 찾을 수 없어요', micBusy: '다른 앱이 마이크를 쓰고 있어요',
       micDenied: '마이크를 쓸 수 없어요. 주소창 왼쪽 아이콘에서 마이크를 허용해 주세요',
@@ -275,6 +305,9 @@ const DualSub = (() => {
       hintTurnOn: 'Turn on {0} subtitles once in Netflix’s subtitle menu',
       hintLoading: 'Loading {0} subtitles…',
       hintFailed: 'Couldn’t load the subtitles (see [dualsub] in the console)',
+      hintTransFailed: 'Couldn’t load the {0} translation, showing the original only (see [dualsub] in the console)',
+      hintNoTrans: 'This title has no {0} translation subtitles',
+      hintNoManifest: 'Couldn’t find this title’s subtitles. Try reloading the page',
       repeatOn: 'Repeat each line {0}×', repeatOff: 'Line repeat off', repeatBtn: 'Repeat', repeatProgress: 'Repeat {0}/{1}',
       micNotFound: 'No microphone found', micBusy: 'Another app is using the microphone',
       micDenied: 'Can’t use the microphone. Allow it from the icon at the left of the address bar',
@@ -311,6 +344,48 @@ const DualSub = (() => {
   }
   const UI_LANG = uiLang(typeof navigator === 'object' ? navigator.language : '');
   const t = (key, ...args) => (STRINGS[UI_LANG][key] ?? STRINGS.en[key] ?? key).replace(/\{(\d)\}/g, (_, i) => args[i]);
+  // A subtitle choice ("ko", "en|cc") by its language's name in the UI language: 한국어 / Korean.
+  function langName(key) {
+    const code = String(key || '').split('|')[0];
+    try { return new Intl.DisplayNames([UI_LANG], { type: 'language' }).of(code) || code; } catch { return code; }
+  }
+
+  // ---- Saved-item IDs (☆). bridge.js stores each item under "item:<id>" and refuses an id over SAVE_ID_MAX. ----
+  // Older versions used "s:<movieId>:<ms>" and "w:<headword lowercased>": no language, so French "chat" took English
+  // "chat"'s place (and its ☆ unsaved it), a line at the same time in another original track took the old one's, and
+  // a long phrase's id was cut at 300 characters by the bridge, so its ☆ never matched again. Those items stay as
+  // they are (the saved list, CSV and Anki read every item); a ☆ only ever matches the ids below, so it never takes
+  // an old item for a new one, and never unsaves one.
+  const SAVE_ID_MAX = 300;
+  // cyrb53: a 53-bit string hash, so ids stay short and two different texts practically never share one.
+  function textHash(s) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  const idLang = lang => (lang || '').toLowerCase().split('-')[0] || 'und';
+  // A line: the title, the original subtitles' language, its start and its text. Same text at the same time is the
+  // same line whatever track it came from (English and English CC); other text, or another language, is another.
+  // The translation is not part of it: switching translations shows the same line as saved (one card per line).
+  // The text's identity ignores layout only: line breaks, runs of spaces and spaces at the ends (one track breaks a
+  // line where another doesn't). Letters, case and punctuation still tell lines apart; the item keeps the text as shown.
+  const lineIdentity = text => String(text).normalize('NFC').replace(/\s+/g, ' ').trim();
+  const sentenceId = (movieId, lang, start, text) =>
+    `s2:${movieId}:${idLang(lang)}:${Math.round(start * 1000)}:${textHash(lineIdentity(text))}`;
+  // A word or phrase: its language and the headword exactly as written (NFC). Not lowercased: German nouns are
+  // capitalized (Weg "way" / weg "away", Arm "arm" / arm "poor"), and Turkish I/ı lowercase differently; the
+  // dictionary's own headword already gives one spelling per word. A long phrase is shortened, with a hash of the
+  // whole of it, so the id stays under SAVE_ID_MAX and is the same one each time.
+  function wordId(lang, headword) {
+    const w = String(headword).normalize('NFC'), id = `w2:${idLang(lang)}:${w}`;
+    return id.length <= 120 ? id : `w2h:${idLang(lang)}:${Array.from(w).slice(0, 60).join('')}:${textHash(w)}`;
+  }
 
   // Subtitle languages a new user starts with: their own language as the translation, English to learn (Spanish
   // when their own language is English).
@@ -340,8 +415,8 @@ const DualSub = (() => {
   }
 
   return { parseTime, parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, lemmaCandidates,
-    wordCandidates, formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
-    STRINGS, uiLang, t, defaultLangs, dictLink, DICTS, guidePage };
+    wordCandidates, startsSentence, formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
+    STRINGS, uiLang, t, langName, defaultLangs, dictLink, DICTS, guidePage, SAVE_ID_MAX, textHash, sentenceId, wordId };
 })();
 
 if (typeof module === 'object') module.exports = DualSub;

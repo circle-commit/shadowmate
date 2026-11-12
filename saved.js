@@ -22,9 +22,11 @@ document.getElementById('anki').title = t('ankiTitle');
 const listEl = document.getElementById('list');
 const el = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
+// Every "item:" key, whatever its id's form (older versions' "s:"/"w:" ids included, see sentenceId in lib.js).
+// key: the storage key it was read from, so × removes exactly that one whatever the item inside says its id is.
 async function savedItems() {
   const all = await chrome.storage.local.get(null);
-  return Object.keys(all).filter(k => k.startsWith(PREFIX)).map(k => all[k]).sort((a, b) => b.savedAt - a.savedAt);
+  return Object.keys(all).filter(k => k.startsWith(PREFIX)).map(k => ({ ...all[k], key: k })).sort((a, b) => b.savedAt - a.savedAt);
 }
 
 async function render() {
@@ -48,7 +50,7 @@ async function render() {
     i.type === 'word' && i.sentence ? el('div', { className: 'context' }, i.sentence) : '',
     el('div', { className: 'src' }, [i.title, DualSub.formatTime(i.time)].filter(Boolean).join(' · ')),
     // detail < 2: the second click of a double-click would hit the next item, which moved into this slot.
-    el('button', { className: 'del', title: t('del'), onclick: e => { if (e.detail < 2) chrome.storage.local.remove(PREFIX + i.id); } }, '×'))));
+    el('button', { className: 'del', title: t('del'), onclick: e => { if (e.detail < 2) chrome.storage.local.remove(i.key); } }, '×'))));
 }
 
 function download(name, text) {

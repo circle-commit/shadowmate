@@ -33,7 +33,7 @@ Shadowmate shows subtitles in two languages on Netflix, the one you're learning 
 · Recordings live only in the tab's memory and are discarded. Nothing is saved or sent anywhere
 
 ▶ Word and idiom lookup (any subtitle language)
-· Click a word for its definition (Wiktionary, in English) and a link to a dictionary in your language
+· Click a word for its definition (Wiktionary's English one, translated on your computer into your translation subtitles' language where Chrome's built-in translator supports it) and a link to the dictionary you choose
 · Drag across several words to look up idioms (beat me to the punch → beat someone to the punch)
 
 ▶ Word list

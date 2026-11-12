@@ -1,8 +1,8 @@
 // Runs in the page itself ("world": "MAIN") at document_start, so JSON.parse is wrapped before Netflix's player loads
 // and netflix.appContext (the player API) is reachable.
 (() => {
-  const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates,
-    DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates, t, defaultLangs, dictLink, DICTS } = DualSub;
+  const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates, startsSentence,
+    DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates, t, langName, defaultLangs, dictLink, DICTS, sentenceId, wordId } = DualSub;
   // TTML profiles, best first. imsc1.1 is the only text one for Korean/Japanese/Chinese; nflx-cmisc is images.
   const FORMATS = ['imsc1.1', 'dfxp-ls-sdh', 'simplesdh'];
   const log = (...a) => console.info('[dualsub]', ...a);
@@ -68,46 +68,157 @@
 
   // ---- 3. Load and pair cues for the current title ----
   const movieId = () => (/^\/watch\/(\d+)/.exec(location.pathname) || [])[1];
-  const cueCache = new Map();
+  // url -> Promise of cues. Failures leave it at once (so the next load downloads again); otherwise the
+  // CUE_CACHE_MAX most recently used files stay, enough for switching back and forth between a title's languages.
+  const cueCache = new Map(), CUE_CACHE_MAX = 8;
+  // A download that hangs (no answer, or a body that never ends) is given up after FETCH_TIMEOUT_MS, as a failure.
+  const FETCH_TIMEOUT_MS = 20000;
+  // `retry` marks failures worth trying again in a moment: the network (offline, connection reset, the timeout) and
+  // HTTP 408, 429 and 5xx. Any other HTTP error (403/404: a bad or expired URL) or an unreadable file would fail the
+  // same way again.
+  const netError = e => Object.assign(new Error(`network: ${e && e.message}`), { retry: true, cause: e });
   const fetchCues = url => {
-    if (!cueCache.has(url)) {
-      cueCache.set(url, nativeFetch(url)
-        .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.text(); })
-        .then(parseTTML)
-        .catch(e => { cueCache.delete(url); throw e; }));
-    }
-    return cueCache.get(url);
+    let p = cueCache.get(url);
+    if (p) { cueCache.delete(url); cueCache.set(url, p); return p; } // now the most recently used
+    const abort = new AbortController(), timer = setTimeout(() => abort.abort(), FETCH_TIMEOUT_MS);
+    p = nativeFetch(url, { signal: abort.signal })
+      .then(res => {
+        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`),
+          { retry: res.status === 408 || res.status === 429 || res.status >= 500, status: res.status });
+        return res.text().catch(e => { throw netError(e); });
+      }, e => { throw netError(e); })
+      .finally(() => clearTimeout(timer))
+      .then(parseTTML)
+      .catch(e => { if (cueCache.get(url) === p) cueCache.delete(url); throw e; }); // not a newer try's entry
+    cueCache.set(url, p);
+    for (const old of cueCache.keys()) if (cueCache.size > CUE_CACHE_MAX) cueCache.delete(old); else break;
+    return p;
   };
+  // The same lines at the same times: a new URL for the same file (a manifest refresh), so nothing on screen moved.
+  const sameCues = (a, b) => a === b || (a.length === b.length
+    && a.every((c, i) => c.start === b[i].start && c.end === b[i].end && c.text === b[i].text));
 
-  let shownId, cues = [], trans = [], shown = -2, prevT = 0, prevVideoT = 0, hint = '', loadGen = 0, titleTicks = 0;
+  // pairedKey: "movieId trackKey" of the translation `trans` holds, once it is in ('' while it isn't).
+  let pairedKey = '', shownId, cues = [], trans = [], shown = -2, prevT = 0, prevVideoT = 0, hint = '', loadGen = 0, titleTicks = 0;
   let armed = -1;       // cue whose end triggers auto-pause
   let stuck = null;     // {i, at, sawPause}: we auto-paused after cue i at time `at`
   let jumpedUntil = 0;  // right after our own seek, trust `armed` over currentTime (the seek may not have landed)
   let slow = null;      // {v, rate, i}: replaying cue i slowly on video v; `rate` is the speed to put back
   let loop = { i: -1, n: 0 }; // 문장 반복: cue i has been replayed n times so far
 
-  async function load() {
+  // A download that failed for a passing reason (see fetchCues) loads again by itself a few times, further apart each
+  // time, for the same title and languages only. A load() for another title or languages cancels the pending retry.
+  // One for the same choice while it waits (a manifest refresh, hydrate() finishing) gets the failed URLs' errors
+  // without asking again and leaves the retry, its timing and the count as they are; a new URL still downloads.
+  const RETRY_DELAYS = [2000, 5000, 15000];
+  // dead: url -> error of a URL not to ask for again while the key stays (an HTTP error that isn't retried, 403/404,
+  // or one whose retries ran out): a manifest refresh with the same URL gets its error, so its failure hint stays.
+  const retry = { key: '', n: 0, timer: 0, failed: new Map(), dead: new Map() }; // key: "movieId orig trans"; failed: url -> error
+  const cancelRetry = () => { clearTimeout(retry.timer); retry.timer = 0; retry.failed.clear(); };
+  // Back online: what was given up on may load now. Load again if this title has failed (a URL given up on, or
+  // retries spent and not yet reset by a load that worked); a request already under way is reused (fetchCues).
+  addEventListener('online', () => {
+    const failing = retry.dead.size > 0 || retry.n > 0;
+    retry.dead.clear();
+    if (failing && movies.has(movieId())) load();
+  });
+  // A watch page whose player manifest never came by (the extension was installed or updated with the page already
+  // open, so JSON.parse was wrapped too late): say so after a while instead of showing nothing.
+  const NO_MANIFEST_MS = 10000;
+  let manifestWait = 0;
+
+  // rehydrate: false from hydrate() itself, so a stalled attempt waits for the next load() instead of looping.
+  async function load({ rehydrate = true } = {}) {
     const id = movieId(), known = movies.get(id), gen = ++loadGen;
-    if (!known) return;
+    clearTimeout(manifestWait);
+    manifestWait = 0;
+    if (!known) {
+      cancelRetry();
+      if (id) manifestWait = setTimeout(() => { if (movieId() === id && !movies.has(id)) setHint(t('hintNoManifest')); },
+        NO_MANIFEST_MS);
+      return;
+    }
     send({ type: 'get-saved' });
-    // One entry per key: a second "English" (e.g. a STRIPPED_SDH variant) could never be picked anyway.
-    const tracks = [...known.values()].filter((t, i, a) => a.findIndex(u => trackKey(u) === trackKey(t)) === i);
-    const o = pickTrack(tracks, prefs.orig), t = pickTrack(tracks, prefs.trans);
-    fillSelect(origSel, tracks, o, false);
-    fillSelect(transSel, tracks, t, true);
-    const missing = [o, t].filter(x => x && !x.url);
-    missing.forEach(x => hydrate(id, x));
+    // One entry per key: a second "English" (e.g. a STRIPPED_SDH variant) could never be picked anyway. Of those, the
+    // first one with a URL, so a URL-less duplicate never hides one that can load (or sends it to hydrate()).
+    const byKey = new Map();
+    for (const tr of known.values()) { const had = byKey.get(trackKey(tr)); if (!had || (!had.url && tr.url)) byKey.set(trackKey(tr), tr); }
+    const tracks = [...byKey.values()];
+    // origTrack/transTrack, not o/t: `t` is the UI text function from DualSub, used for the hints below.
+    const origTrack = pickTrack(tracks, prefs.orig), transTrack = pickTrack(tracks, prefs.trans);
+    // The manifest did turn up after all: the "reload the page" hint no longer applies while the lines download.
+    if (hint === t('hintNoManifest')) setHint(origTrack && origTrack.url ? t('hintLoading', origTrack.name) : '');
+    fillSelect(origSel, tracks, origTrack, false);
+    fillSelect(transSel, tracks, transTrack, true);
+    const missing = [origTrack, transTrack].filter(x => x && !x.url);
+    // Turned off (H): Netflix's own subtitles are showing, so don't switch them around; toggleOff() loads on turning on.
+    if (!prefs.off) missing.forEach(x => hydrate(id, x, rehydrate));
+    const key = `${id} ${origTrack ? trackKey(origTrack) : ''} ${transTrack ? trackKey(transTrack) : ''}`;
+    if (retry.key !== key) { cancelRetry(); retry.dead.clear(); retry.key = key; retry.n = 0; } // another title or language: start afresh
+    // A URL waiting for its retry, or given up on: its error again, no request (see RETRY_DELAYS).
+    const get = url => (retry.dead.has(url) ? Promise.reject(retry.dead.get(url))
+      : retry.failed.has(url) ? Promise.reject(retry.failed.get(url)) : fetchCues(url));
+    // Only from a load that is still the newest (checked by the callers), so at most one retry is ever pending.
+    const retryLater = (err, url) => {
+      if (!(err && err.retry)) { if (err && err.status && url) retry.dead.set(url, err); return; } // 403/404
+      if (retry.timer) { retry.failed.set(url, err); return; } // the pending retry covers this one too
+      // Retries used up on HTTP errors (5xx/429/408) only: a network failure (offline, the timeout) is tried again
+      // on the next load, and on getting back online (below).
+      if (retry.n >= RETRY_DELAYS.length) { if (url && err.status) retry.dead.set(url, err); return; }
+      const ms = RETRY_DELAYS[retry.n++];
+      retry.failed.set(url, err);
+      log(`retry ${retry.n}/${RETRY_DELAYS.length} in ${ms} ms`);
+      retry.timer = setTimeout(() => { retry.timer = 0; retry.failed.clear(); if (movieId() === id) load(); }, ms);
+    };
+    // The translation downloads on its own: if only it fails, the original lines still show (without translations)
+    // and a hint says so. An original that fails still fails the whole load (catch below).
+    // Nothing on screen yet and the original's lines on their way: say so, rather than no panel at all. Lines already
+    // showing stay as they are until the new ones are in. (An original waiting for its retry fails again at once, below,
+    // so its failure hint comes straight back.)
+    if (!cues.length && origTrack && origTrack.url) setHint(t('hintLoading', origTrack.name));
+    let transError = null;
+    const transUrl = transTrack && transTrack.url, transKey = transTrack ? `${id} ${trackKey(transTrack)}` : '';
+    const transP = transUrl ? get(transUrl).catch(e => {
+      transError = e;
+      // Failing after the original already did (so a retry is waiting): wait with it, if this is still the newest.
+      if (retry.timer && gen === loadGen && movieId() === id) retryLater(e, transUrl);
+      return [];
+    }) : Promise.resolve([]);
+    const stale = () => gen !== loadGen || movieId() !== id; // a newer load() or another title took over
+    // waiting: the original lines show and the translation is still on its way.
+    const hintFor = waiting => {
+      const names = missing.map(x => x.name).join(', ');
+      return !origTrack ? t('hintNoTrack')
+        : missing.length ? (missing.every(x => hydrated(id, x)) ? t('hintTurnOn', names) : t('hintLoading', names))
+        : waiting ? t('hintLoading', transTrack.name)
+        : transError ? t('hintTransFailed', transTrack.name)
+        // The chosen translation isn't in this title: its select shows "none", but prefs.trans stays for the next one.
+        : prefs.trans && !transTrack ? t('hintNoTrans', langName(prefs.trans))
+        : '';
+    };
     try {
-      const [oc, tc] = await Promise.all([o && o.url ? fetchCues(o.url) : [], t && t.url ? fetchCues(t.url) : []]);
-      if (gen !== loadGen || movieId() !== id) return; // a newer load() or another title took over
-      if (oc !== cues) { armed = -1; stuck = null; jumpedUntil = 0; dropTake(); } // old indexes are meaningless
-      const lang = o ? o.lang.toLowerCase().split('-')[0] : 'en';
-      // Same original line list (a manifest refresh or a translation change): keep the shown line and an open popup.
-      const same = oc === cues && lang === origLang;
+      const oc = await (origTrack && origTrack.url ? get(origTrack.url) : []);
+      if (stale()) return;
+      // A slow translation doesn't hold the original lines back: they show first and it joins them when it comes.
+      // One already in (the cache) or quick to come is put in with them, in one go. A macrotask, not a microtask:
+      // a finished download's .catch() above settles a few microtasks later, so only this reliably lets it win.
+      const WAIT = {};
+      let tc = await Promise.race([transP, new Promise(r => setTimeout(() => r(WAIT), 0))]);
+      if (stale()) return;
+      const waiting = tc === WAIT;
+      const lang = origTrack ? origTrack.lang.toLowerCase().split('-')[0] : 'en';
+      // Same original lines at the same times (a translation change, or a manifest refresh, even with a new URL): keep
+      // the shown line, an open popup, a take and auto-pause. Any other change makes the old line indexes meaningless.
+      const same = lang === origLang && sameCues(oc, cues);
+      if (!same) { armed = -1; stuck = null; jumpedUntil = 0; dropTake(); }
+      // Waiting, the same lines and the same translation already next to them (a manifest refresh): leave those up.
+      const keep = waiting && same && pairedKey === transKey;
       cues = oc;
-      trans = pairCues(oc, tc);
+      if (!waiting) trans = pairCues(oc, tc);
+      else if (!keep) trans = oc.map(() => '');
+      if (!keep) pairedKey = waiting || transError ? '' : transKey;
       origLang = lang;
-      transLang = t ? t.lang : ''; // the word popup's dictionary explains in this language
+      transLang = transTrack ? transTrack.lang : ''; // the word popup's dictionary explains in this language
       renderCues();
       if (same) {
         transEl.textContent = shown >= 0 ? trans[shown] : '';
@@ -118,16 +229,26 @@
         shown = -2; // re-render on the next frame
         origEl.textContent = transEl.textContent = '';
       }
-      const names = missing.map(x => x.name).join(', ');
-      setHint(!o ? t('hintNoTrack')
-        : !missing.length ? ''
-        : missing.every(x => hydration.get(`${id} ${x.id}`) === 'done') ? t('hintTurnOn', names)
-        : t('hintLoading', names));
-      log(`loaded ${o && trackKey(o)} (${oc.length}) + ${t ? trackKey(t) : 'none'} (${tc.length})`);
+      if (waiting) {
+        if (!keep) setHint(hintFor(true));
+        tc = await transP;
+        // Only the translation changes now: the shown line, a popup, a take and auto-pause stay as they are.
+        if (stale() || cues !== oc) return;
+        trans = pairCues(oc, tc);
+        pairedKey = transError ? '' : transKey;
+        items.forEach((item, i) => { const c = item.querySelector('.ds-item-trans'); if (c) c.textContent = trans[i]; });
+        if (shown >= 0) transEl.textContent = trans[shown];
+      }
+      setHint(hintFor(false));
+      if (transError) { console.warn('[dualsub] translation fetch failed', transError); retryLater(transError, transUrl); }
+      else { retry.n = 0; cancelRetry(); } // everything that could load did: a later failure gets its retries again
+      log(`loaded ${origTrack && trackKey(origTrack)} (${oc.length}) + ${transTrack ? trackKey(transTrack) : 'none'} (${tc.length})`);
     } catch (e) {
-      if (gen !== loadGen) return;
+      if (gen !== loadGen || movieId() !== id) return;
       console.warn('[dualsub] subtitle fetch failed', e);
       setHint(t('hintFailed'));
+      retryLater(e, origTrack && origTrack.url);
+      if (transError) retryLater(transError, transTrack.url); // the translation failed first: it waits for the same retry
     }
   }
 
@@ -173,28 +294,42 @@
   }
 
   // A language Netflix listed without a URL: switch Netflix's own subtitles to it for a moment, which makes Netflix
-  // send a newer manifest with the URL (onManifest merges it), then switch back. One at a time, once per title.
-  const hydration = new Map(); // "movieId trackId" -> 'pending' | 'done'
+  // send a newer manifest with the URL (onManifest merges it), then switch back. One at a time.
+  // "movieId trackId" -> {state, tries}: 'pending'; 'done' (switched, so whatever Netflix sends is in); or 'stalled'
+  // (never got to switch: no player yet, or the language not in its menu), which a later load() tries again, up to
+  // HYDRATE_TRIES in all. Leaving the title mid-way forgets the attempt, so coming back starts afresh.
+  const HYDRATE_TRIES = 3;
+  const hydration = new Map();
+  const hydrated = (id, track) => ['done', 'stalled'].includes((hydration.get(`${id} ${track.id}`) || {}).state);
   let hydrating = Promise.resolve();
-  function hydrate(id, track) {
-    const key = `${id} ${track.id}`;
-    if (hydration.has(key)) return;
-    hydration.set(key, 'pending');
+  function hydrate(id, track, again) {
+    const key = `${id} ${track.id}`, h = hydration.get(key);
+    if (h && !(again && h.state === 'stalled' && h.tries < HYDRATE_TRIES)) return;
+    const tries = (h ? h.tries : 0) + 1;
+    hydration.set(key, { state: 'pending', tries });
+    let state = 'stalled';
     hydrating = hydrating.then(async () => {
       const p = await waitFor(() => { const p = player(); return p && p.getTimedTextTrackList().length && p; }, 15000);
+      // Turned off while this waited in line: not tried, so not counted either (turning on loads, which tries again).
+      if (prefs.off) { state = 'off'; return log('off: not switching to', track.id); }
       const target = p && movieId() === id && p.getTimedTextTrackList().find(t => t.trackId === track.id);
       if (!target) return log('cannot load', track.id);
       const prev = p.getTimedTextTrack();
       try {
         await p.setTimedTextTrack(target);
+        state = 'done';
         await waitFor(() => movies.get(id).get(track.id).url, 8000);
       } finally {
-        if (prev) await p.setTimedTextTrack(prev);
+        // Put back what was on, unless the user picked something else in Netflix's menu meanwhile (or left the title).
+        const now = p.getTimedTextTrack();
+        if (prev && movieId() === id && now && now.trackId === target.trackId) await p.setTimedTextTrack(prev);
       }
     }).catch(e => console.warn('[dualsub] hydrate', e))
       .then(() => {
-        hydration.set(key, 'done');
-        if (movieId() === id) load(); // pick up the URL, or show the manual hint if it never came
+        if (movieId() !== id) return hydration.delete(key); // left the title: its next visit tries again
+        if (state === 'off') return hydration.delete(key);
+        hydration.set(key, { state, tries });
+        load({ rehydrate: false }); // pick up the URL, or show the manual hint if it never came
       });
   }
 
@@ -246,11 +381,13 @@
     slow = { v, rate, i: armed }; // armed: the line go(0) jumped to
     setRate(v, SLOW_RATE);
     keyButtons.slow.classList.add('on');
+    keyButtons.slow.setAttribute('aria-pressed', 'true');
   }
   function endSlow() {
     if (slow.v.playbackRate === SLOW_RATE) setRate(slow.v, slow.rate); // unless something else changed it since
     slow = null;
     keyButtons.slow.classList.remove('on');
+    keyButtons.slow.setAttribute('aria-pressed', 'false');
   }
 
   // 문장 반복 (T / 반복): play every line prefs.repeat times before moving on; tick() replays it at its end.
@@ -377,6 +514,7 @@
       closePopup(); cancelRecord(); stopCompare();
     }
     toast(prefs.off ? t('subsOff', keyLabel(prefs.keys.off)) : t('subsOn'));
+    if (!prefs.off) load(); // a language that came without a URL meanwhile was left alone (see load): fetch it now
   }
 
   function toggleAP() {
@@ -414,31 +552,58 @@
   }
 
   // ---- Saving (☆): bridge.js keeps items in chrome.storage; the toolbar popup lists and exports them ----
-  let savedIds = new Set(), wordStar = null, wordItem = null; // wordStar/wordItem: the open word popup's star
+  let storedIds = new Set(), savedIds = new Set(), wordStar = null, wordItem = null; // wordStar/wordItem: the open word popup's star
+  // storedIds: what the bridge last said is in storage. savedIds is that plus the ☆ presses it hasn't confirmed yet:
+  // pending, id -> {want: saved or not, n: requests sent and not yet answered by a failure}. A press stays pending
+  // until a saved-ids snapshot shows what it wanted, so a snapshot sent for another reason (another item's re-ask,
+  // another tab, load()) while it is on its way doesn't turn its ★ off and on again.
+  const pending = new Map();
+  const view = () => {
+    savedIds = new Set(storedIds);
+    for (const [id, p] of pending) if (p.want) savedIds.add(id); else savedIds.delete(id);
+  };
   const titles = new Map(); // movieId -> title, read from Netflix's controls whenever they are showing
   const send = msg => postMessage({ source: 'dualsub', ...msg }, location.origin);
   addEventListener('message', e => {
     const m = e.data;
     if (e.source !== window || !m || m.source !== 'dualsub-bridge') return;
-    if (m.type === 'saved-ids' && Array.isArray(m.ids)) savedIds = new Set(m.ids);
-    else if (m.type === 'save-failed' && typeof m.id === 'string') {
-      if (!savedIds.delete(m.id)) savedIds.add(m.id); // undo the optimistic toggle
-      setHint(t('saveFailed'));
+    if (m.type === 'saved-ids' && Array.isArray(m.ids)) {
+      storedIds = new Set(m.ids);
+      for (const [id, p] of pending) if (storedIds.has(id) === p.want) pending.delete(id); // done as pressed
+      view();
+    } else if (m.type === 'save-failed' && typeof m.id === 'string') {
+      // Not flipped back: after quick presses (save, unsave, then the save's failure) flipping would show ★ for nothing
+      // stored. A later press still on its way keeps its wish; with none, that item goes back to what storage last
+      // held, and storage is asked again (one ask per failure). If the extension was reloaded under this tab, the
+      // bridge can't answer: the last known state stays, never a guess.
+      const p = pending.get(m.id);
+      if (!(p && --p.n > 0)) pending.delete(m.id);
+      view();
+      send({ type: 'get-saved' });
+      toast(t('saveFailed'), 4000); // a passing note (long enough to read): the subtitle hint line keeps its own message
     } else return;
     updateStars();
   });
   function toggleSave(item) {
-    if (savedIds.delete(item.id)) send({ type: 'unsave', id: item.id });
-    else { savedIds.add(item.id); send({ type: 'save', item }); }
+    const want = !savedIds.has(item.id);
+    send(want ? { type: 'save', item } : { type: 'unsave', id: item.id });
+    const p = pending.get(item.id) || { n: 0 };
+    p.want = want;
+    p.n++;
+    pending.set(item.id, p);
+    view();
     updateStars(); // right away; the bridge's saved-ids message confirms
   }
   const lineInfo = i => ({ movieId: movieId(), title: readTitle() || titles.get(movieId()) || '', time: cues[i].start });
-  const sentenceItem = i => ({ ...lineInfo(i), id: `s:${movieId()}:${Math.round(cues[i].start * 1000)}`,
-    type: 'sentence', text: cues[i].text, meaning: trans[i] || '' });
+  // Ids: see sentenceId/wordId in lib.js (with the original subtitles' language; older items keep their old ids).
+  const sentenceItem = i => ({ ...lineInfo(i), id: sentenceId(movieId(), origLang, cues[i].start, cues[i].text),
+    type: 'sentence', text: cues[i].text, meaning: trans[i] || '', lang: origLang });
   const starBtn = btn(icon('star'), t('saveLine'), () => { if (cues[shown]) toggleSave(sentenceItem(shown)); });
+  // ★ also as aria-pressed, so a screen reader says whether it is saved.
+  const pressed = (b, on) => { b.classList.toggle('saved', on); b.setAttribute('aria-pressed', String(on)); };
   function updateStars() {
-    starBtn.classList.toggle('saved', !!cues[shown] && savedIds.has(sentenceItem(shown).id));
-    if (wordStar) wordStar.classList.toggle('saved', savedIds.has(wordItem.id));
+    pressed(starBtn, !!cues[shown] && savedIds.has(sentenceItem(shown).id));
+    if (wordStar) pressed(wordStar, savedIds.has(wordItem.id));
   }
   // "The Office" + "S1:E2 Diversity Day" from the title block in Netflix's player controls.
   function readTitle() {
@@ -503,6 +668,7 @@
     compare: Object.assign(btn(t('compareBtn'), '', compareAgain), { className: 'ds-btn ds-text ds-cmp', hidden: true }),
     hideOrig: el('label', { className: 'ds-ap' }, hideBoxes.hideOrig, t('actHideOrig')),
     hideTrans: el('label', { className: 'ds-ap' }, hideBoxes.hideTrans, t('actHideTrans')) };
+  for (const b of [starBtn, keyButtons.slow]) b.setAttribute('aria-pressed', 'false'); // toggles (see pressed, slowRepeat)
   // ⚙ row: subtitle languages (static, filled by load()) and the shortcut keys (re-rendered below).
   const shortcutsEl = el('div');
   const settingsEl = el('div', { className: 'ds-settings', hidden: true },
@@ -582,6 +748,8 @@
   });
   const popup = el('div', { id: 'dualsub-popup', hidden: true }); // word/phrase meaning, see openLookup()
   const toastEl = el('div', { id: 'dualsub-toast', hidden: true }); // short confirmation over the panel's bottom row
+  toastEl.setAttribute('role', 'status'); // read out by screen readers (W/E/T/Q change nothing else on screen)
+  toastEl.setAttribute('aria-live', 'polite');
   const root = el('div', { id: 'dualsub-root' }, panel, list, popup, toastEl);
   applyHide();
   // Keep clicks on our UI from reaching Netflix (which would toggle play/pause).
@@ -595,6 +763,7 @@
   // prefs.pos = panel center x and bottom edge, as fractions of the window, so it survives resizes and fullscreen.
   const CONTROL = 'button, select, input, label, .ds-word, .ds-bar, .ds-resize'; // the bar moves under the pointer
   let controlsLift = 0, drag = null, dragged = false, adPlaying = false;
+  let pauseAd = false; // Netflix's ad over a paused title (see tick)
 
   // Apply the dragged spot (kept inside the window) or the CSS default, and stay above Netflix's controls.
   // clientWidth/Height: the area fixed elements live in (innerWidth would include a page scrollbar).
@@ -800,7 +969,12 @@
     // Japanese verbs come out of the segmenter in pieces (食 / べ), so the piece right after this one is tried with it.
     const next = spans[0].nextSibling;
     const joined = !phrase && origLang === 'ja' && next && next.classList && next.classList.contains('ds-word') ? [text + next.textContent] : [];
-    let found = await define(phrase ? phraseCandidates(words, origLang) : [...joined, ...wordCandidates(text, origLang)]);
+    // The line's text before the word (as renderOrig split it): whether the word opens a sentence (German capitals).
+    const k = [...origEl.querySelectorAll('.ds-word')].indexOf(spans[0]), parts = splitWords(cues[line].text, origLang);
+    const at = parts.map((x, j) => j).filter(j => parts[j].word)[k] ?? -1;
+    const sentenceStart = at >= 0 && startsSentence(parts.slice(0, at).map(x => x.text).join(''));
+    let found = await define(phrase ? phraseCandidates(words, origLang)
+      : [...joined, ...wordCandidates(text, origLang, { sentenceStart })]);
     if (phrase && !found.entry && origLang !== 'en' && text.includes(' ')) { // "echo de menos" -> "echar de menos"
       const base = (await define(wordCandidates(words[0], origLang))).entry;
       const again = base && await define(phraseCandidates([base.lemma || base.word, ...words.slice(1)], origLang));
@@ -819,7 +993,7 @@
       if (error) log('lookup failed', error);
     }
     const headword = entry ? entry.word : text;
-    wordItem = { ...lineInfo(line), id: `w:${headword.toLowerCase()}`, type: 'word', text: headword,
+    wordItem = { ...lineInfo(line), id: wordId(origLang, headword), type: 'word', text: headword, lang: origLang,
       meaning: entry ? entry.meanings.map(m => `(${m.pos}) ${m.defs[0].text}`).join(' / ') : '',
       sentence: cues[line].text, translation: trans[line] || '' };
     wordStar = el('button', { className: 'ds-pop-star', type: 'button', title: phrase ? t('savePhrase') : t('saveWord'),
@@ -886,7 +1060,7 @@
     toast(ok ? t('copied') : t('copyFailed'));
   }
   let toastTimer = 0;
-  function toast(text) {
+  function toast(text, ms = 1400) {
     // A hidden panel (turned off) has no box: use the bottom middle of the window.
     const r = panel.hidden ? { left: 0, width: innerWidth, bottom: innerHeight * 0.9 } : panel.getBoundingClientRect();
     toastEl.textContent = text;
@@ -894,7 +1068,7 @@
     toastEl.style.bottom = `${Math.round(innerHeight - r.bottom + 6)}px`; // over the timing bar, clear of the word popup above
     toastEl.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastEl.hidden = true; }, 1400);
+    toastTimer = setTimeout(() => { toastEl.hidden = true; }, ms);
   }
 
   // A press anywhere outside our UI closes it (inside, a word click opens the next one, and a line change closes it).
@@ -963,7 +1137,7 @@
     }
     if (e.code === 'Escape' && !popup.hidden) closePopup();
     const offKey = prefs.off && e.code && e.code === prefs.keys.off && video(); // the one key alive while off
-    if ((panel.hidden && !offKey) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (((panel.hidden || root.hidden) && !offKey) || e.ctrlKey || e.metaKey || e.altKey) return; // root: pause ad
     const tgt = e.target;
     if (tgt instanceof Element && !root.contains(tgt) && (tgt.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName))) return;
     const action = e.code && Object.keys(ACTIONS).find(a => prefs.keys[a] === e.code); // '' = action with no key
@@ -997,12 +1171,19 @@
     if (v && ++titleTicks % 6 === 0) {
       adPlaying = !!document.querySelector('[data-uia="ads-info-container"]');
       if (adPlaying) closePopup();
+      // Netflix's pause ad (shown over the paused title after a few seconds; seen live 2026-11-12) is not an ad
+      // playing: the title just waits. So only stand aside: hide all of our UI while it shows, keeping the line, an
+      // open popup, a take, a slow replay and auto-pause as they are, and come back as it goes. Only while paused and
+      // drawn, so an ordinary pause (to read, record or look up a word) keeps the panel.
+      const ad = document.querySelector('[data-uia="depp-pause-ad"]');
+      pauseAd = !!(v.paused && ad && ad.getClientRects().length);
       const controls = document.querySelector('[data-uia="controls-standard"]');
       controlsLift = controls ? Math.round(innerHeight - controls.getBoundingClientRect().top + 8) : 0;
       if (titleTicks % 60 === 0) { const title = readTitle(); if (title) titles.set(id, title); }
     }
     if (slow && (slow.v !== v || adPlaying)) endSlow(); // a new player, or an ad, ends the slow replay
     if (adPlaying) { cancelRecord(); stopCompare(); }
+    root.hidden = !!(v && pauseAd);
     // During an ad there is nothing to show; hidden, the panel also leaves A/S/D to Netflix.
     panel.hidden = !(v && !adPlaying && !prefs.off && (cues.length || hint));
     document.documentElement.classList.toggle('dualsub-on', !!(v && cues.length && !prefs.off));
