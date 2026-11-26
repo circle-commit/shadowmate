@@ -1,7 +1,7 @@
 // Runs in the page itself ("world": "MAIN") at document_start, so JSON.parse is wrapped before Netflix's player loads
 // and netflix.appContext (the player API) is reachable.
 (() => {
-  const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates, startsSentence,
+  const { parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates, startsSentence, toTranscript,
     DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates, t, langName, defaultLangs, dictLink, DICTS, sentenceId, wordId } = DualSub;
   // TTML profiles, best first. imsc1.1 is the only text one for Korean/Japanese/Chinese; nflx-cmisc is images.
   const FORMATS = ['imsc1.1', 'dfxp-ls-sdh', 'simplesdh'];
@@ -647,10 +647,20 @@
   const bar = el('div', { className: 'ds-bar' }, strip);
   const list = el('div', { id: 'dualsub-list', hidden: true }); // every line with its translation; click to jump
   let segs = [], items = [], stripX = null, listScrolledAt = 0;
+  let rangeFrom = -1; // where a Shift+click range starts: the list line last clicked (-1: none since renderCues)
   const pick = e => { const hit = e.target.closest('[data-i]'); if (hit) jump(+hit.dataset.i); };
   // On press, not click: the strip moves while the button is down, and a click that ends on another segment is lost.
   strip.addEventListener('mousedown', e => { if (e.button === 0) pick(e); });
-  list.addEventListener('click', pick);
+  // A click jumps to the line and makes it where a Shift+click range starts; a Shift+click copies the range instead
+  // (copyRange), without jumping. (Shift+press selects no page text: root's mousedown handler prevents that.)
+  list.addEventListener('click', e => {
+    const hit = e.target.closest('.ds-item');
+    if (!hit) return;
+    if (e.shiftKey) return copyRange(+hit.dataset.i);
+    rangeFrom = +hit.dataset.i;
+    markLines(-1, -1);
+    jump(rangeFrom);
+  });
   list.addEventListener('wheel', () => { listScrolledAt = performance.now(); }, { passive: true });
 
   // ---- Shortcuts: one key per action, changed in the ⚙ settings row (click a key, press the new one) ----
@@ -1045,6 +1055,28 @@
   async function copyLine() {
     const text = cues[shown] && cues[shown].text.replace(/\s*\n\s*/g, ' '); // one line, not the subtitle's line breaks
     if (!text) return;
+    toast(await writeClipboard(text) ? t('copied') : t('copyFailed'));
+  }
+  // ---- Copy a range of lines from the list (Shift+click), with their times and translations, e.g. to ask a chatbot ----
+  // From rangeFrom (else the line on screen, else the clicked line alone) to line k, either way round. Both lines are
+  // copied whether hidden (W/E) or not: copying is asked for. At most RANGE_MAX lines, the earliest ones, so the
+  // list doesn't become a way to take a whole episode's script.
+  const RANGE_MAX = 100;
+  async function copyRange(k) {
+    if (!cues[k]) return;
+    if (!cues[rangeFrom]) rangeFrom = cues[shown] ? shown : k;
+    const lo = Math.min(rangeFrom, k), n = Math.min(Math.abs(rangeFrom - k) + 1, RANGE_MAX);
+    markLines(lo, lo + n - 1);
+    const lines = cues.slice(lo, lo + n).map((c, j) => ({ start: c.start, text: c.text, trans: trans[lo + j] }));
+    const text = toTranscript(readTitle() || titles.get(movieId()) || '', lines);
+    const capped = Math.abs(rangeFrom - k) + 1 > RANGE_MAX;
+    if (!await writeClipboard(text)) return toast(t('copyFailed'));
+    toast(capped ? t('copiedLinesMax', n) : n === 1 ? t('copiedOneLine') : t('copiedLines', n), capped ? 3000 : 1400);
+  }
+  // ds-sel on list lines lo..hi (none for -1, -1).
+  function markLines(lo, hi) { items.forEach((item, i) => item.classList.toggle('ds-sel', i >= lo && i <= hi)); }
+  // The clipboard API, else (the page's permissions policy, or a lost user gesture) the old way. True if it copied.
+  async function writeClipboard(text) {
     let ok = true;
     try {
       await navigator.clipboard.writeText(text);
@@ -1057,7 +1089,7 @@
       const pl = document.querySelector('[data-uia="player"]');
       if (pl) pl.focus(); // Space/arrows back to Netflix
     }
-    toast(ok ? t('copied') : t('copyFailed'));
+    return ok;
   }
   let toastTimer = 0;
   function toast(text, ms = 1400) {
@@ -1092,6 +1124,7 @@
     strip.replaceChildren(...segs);
     list.replaceChildren(...items);
     stripX = null;
+    rangeFrom = -1; // other lines now: a range starts afresh (the new items have no ds-sel)
   }
 
   // Keep the current line in the middle of the list, unless the user is pointing at it (the line they are about to
@@ -1135,7 +1168,7 @@
       renderShortcuts();
       return;
     }
-    if (e.code === 'Escape' && !popup.hidden) closePopup();
+    if (e.code === 'Escape') { if (!popup.hidden) closePopup(); markLines(-1, -1); } // and Netflix still gets Esc
     const offKey = prefs.off && e.code && e.code === prefs.keys.off && video(); // the one key alive while off
     if (((panel.hidden || root.hidden) && !offKey) || e.ctrlKey || e.metaKey || e.altKey) return; // root: pause ad
     const tgt = e.target;

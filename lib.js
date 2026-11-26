@@ -185,6 +185,19 @@ const DualSub = (() => {
     return h || full ? `${h}:${String(m).padStart(2, '0')}:${r}` : `${m}:${r}`;
   }
 
+  // Lines picked in the subtitle list (Shift+click), as text to paste into a chat: the title (if known), then each line
+  // as "[m:ss] original" with its translation below, a blank line between. Line breaks inside a line become one space,
+  // as when copying the shown line (C). A missing or blank translation leaves its line out.
+  // lines: [{start, text, trans}]
+  function toTranscript(title, lines) {
+    const flat = s => String(s ?? '').replace(/\s*\n\s*/g, ' ');
+    const blocks = lines.map(l => {
+      const tr = flat(l.trans);
+      return `[${formatTime(l.start)}] ${flat(l.text)}` + (tr.trim() ? `\n${tr}` : '');
+    });
+    return (title ? [title, ...blocks] : blocks).join('\n\n');
+  }
+
   // Spreadsheet export: RFC 4180 quoting, a BOM so Excel reads Korean as UTF-8, and a leading ' on cells starting
   // with = + - @ so spreadsheets don't run them as formulas (subtitle lines often start with "- ").
   function toCSV(items) {
@@ -291,6 +304,7 @@ const DualSub = (() => {
       list: '자막 목록', settings: '설정: 자막 언어·단축키', resize: '드래그해서 크기 조절 · 더블클릭: 기본 크기',
       lookingUp: '찾는 중…', dictError: '사전을 불러오지 못했어요', noPhrase: '사전에 없는 표현이에요', noWord: '사전에 없는 단어예요',
       savePhrase: '표현 저장', saveWord: '단어 저장', copied: '문장을 복사했어요', copyFailed: '복사하지 못했어요',
+      copiedLines: '{0}줄을 복사했어요', copiedOneLine: '1줄을 복사했어요', copiedLinesMax: '앞의 {0}줄만 복사했어요 (한 번에 최대 {0}줄)',
       modelLoading: '번역 모델 받는 중… {0}%', machine: '기계 번역',
       dictLink: '{0}에서 보기 ↗', dictLabel: '사전 ', dictAuto: '자동 (언어에 맞게)',
       savedTitle: 'Shadowmate 저장함', savedHeader: '저장함', count: '{0}개', guide: '사용법', guideTitle: '기능과 단축키 설명',
@@ -326,6 +340,7 @@ const DualSub = (() => {
       list: 'Subtitle list', settings: 'Settings: languages & shortcuts', resize: 'Drag to resize · double-click: default size',
       lookingUp: 'Looking up…', dictError: 'Couldn’t reach the dictionary', noPhrase: 'Not in the dictionary', noWord: 'Not in the dictionary',
       savePhrase: 'Save phrase', saveWord: 'Save word', copied: 'Line copied', copyFailed: 'Couldn’t copy',
+      copiedLines: 'Copied {0} lines', copiedOneLine: 'Copied 1 line', copiedLinesMax: 'Copied the first {0} lines (up to {0} at a time)',
       modelLoading: 'Downloading the translation model… {0}%', machine: 'machine translation',
       dictLink: 'Open in {0} ↗', dictLabel: 'Dictionary ', dictAuto: 'Auto (by language)',
       savedTitle: 'Shadowmate saved', savedHeader: 'Saved', count: '{0}', guide: 'Guide', guideTitle: 'Features and shortcuts',
@@ -415,7 +430,7 @@ const DualSub = (() => {
   }
 
   return { parseTime, parseTTML, pairCues, cueIndexAt, trackKey, pickTrack, splitWords, joinWords, wiktionarySenses, lemmaCandidates,
-    wordCandidates, startsSentence, formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
+    wordCandidates, startsSentence, formatTime, toTranscript, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates,
     STRINGS, uiLang, t, langName, defaultLangs, dictLink, DICTS, guidePage, SAVE_ID_MAX, textHash, sentenceId, wordId };
 })();
 

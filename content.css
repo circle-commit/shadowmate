@@ -317,6 +317,8 @@
 }
 #dualsub-list .ds-item:hover { background: rgba(255, 255, 255, 0.06); }
 #dualsub-list .ds-item.on { background: rgba(10, 132, 255, 0.26); }
+#dualsub-list .ds-item.ds-sel { box-shadow: inset 3px 0 0 var(--ds-accent); background: rgba(255, 255, 255, 0.1); } /* Shift+click range, copied */
+#dualsub-list .ds-item.on.ds-sel { background: rgba(10, 132, 255, 0.26); } /* the current line stays blue inside a range */
 #dualsub-list .ds-item-orig { font-size: 14px; font-weight: 500; line-height: 1.35; }
 #dualsub-list .ds-item-trans { margin-top: 2px; color: var(--ds-label-2); font-size: 12.5px; line-height: 1.35; }
 #dualsub-list .ds-item-trans:empty { display: none; }

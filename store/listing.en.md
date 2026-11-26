@@ -38,6 +38,7 @@ Shadowmate shows subtitles in two languages on Netflix, the one you're learning 
 
 ▶ Word list
 · Save words and lines with ☆ and export them to CSV or Anki
+· Shift+click in the subtitle list to copy a stretch of lines (up to 100) with times and translations, to ask an AI or paste into your notes
 
 ▶ And more
 · On ad-supported plans, subtitle timing syncs up again after ads

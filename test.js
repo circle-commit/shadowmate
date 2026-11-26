@@ -8,7 +8,7 @@ test('guide routes regional browser languages and falls back to English', () => 
   assert.equal(guidePage('ko-KR'), 'help.html');
   for (const lang of ['en-US', 'it-IT', '', undefined]) assert.equal(guidePage(lang), 'help.en.html');
 });
-const { parseTime, parseTTML, pairCues, cueIndexAt, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates, lemmaCandidates, formatTime, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates } = require('./lib.js');
+const { parseTime, parseTTML, pairCues, cueIndexAt, pickTrack, splitWords, joinWords, wiktionarySenses, wordCandidates, lemmaCandidates, formatTime, toTranscript, toCSV, toAnki, DEFAULT_KEYS, keyLabel, assignKey, normalizeKeys, phraseCandidates } = require('./lib.js');
 
 const DFXP = `<?xml version="1.0" encoding="utf-8"?>
 <tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" xmlns:tts="http://www.w3.org/ns/ttml#styling" ttp:tickRate="10000000" xml:lang="en">
@@ -302,7 +302,9 @@ test('UI text exists in Korean and English, picked by browser language', () => {
 // faults: {get, set, remove} -> a promise chrome.storage.local returns instead (a rejection: the API failing).
 // getKeys: chrome.storage.local.getKeys as a newer Chrome has it ('ok'), one that throws or rejects; null: none.
 // storageCalls counts get(null) and getKeys() calls.
-function contentPage({ manifestTracks, fetchText, prefs = { orig: 'en', trans: 'ko' }, player = null, storage = null, faults = {}, onSave = () => {}, getKeys = null }) {
+// clipboard: 'ok' gives navigator.clipboard, 'deny' one whose writeText rejects; null: none. Either way short of
+// 'ok', copying falls back to execCommand('copy'), which copies if execOk. clips: the texts that reached the clipboard.
+function contentPage({ manifestTracks, fetchText, prefs = { orig: 'en', trans: 'ko' }, player = null, storage = null, faults = {}, onSave = () => {}, getKeys = null, clipboard = null, execOk = true }) {
   const vm = require('node:vm');
   const fs = require('node:fs');
   class El {
@@ -320,7 +322,7 @@ function contentPage({ manifestTracks, fetchText, prefs = { orig: 'en', trans: '
     }
     replaceChildren(...kids) { this.children = []; this.textContent = ''; this.append(...kids); }
     setAttribute(k, v) { (this.attrs ||= {})[k] = String(v); } getAttribute(k) { return this.attrs?.[k] ?? null; }
-    focus() {} blur() {} setPointerCapture() {}
+    focus() {} blur() {} setPointerCapture() {} select() {}
     addEventListener(type, fn) { ((this.on ||= {})[type] ||= []).push(fn); }
     dispatch(type, e) { for (const fn of (this.on || {})[type] || []) fn(e); }
     has(sel) { const c = sel.slice(1); return sel[0] === '.' && (this.className.split(' ').includes(c) || this.classList.contains(c)); }
@@ -333,7 +335,7 @@ function contentPage({ manifestTracks, fetchText, prefs = { orig: 'en', trans: '
     getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0 }; }
     getClientRects() { return this.drawn ? [this.getBoundingClientRect()] : []; } // drawn: laid out on screen
   }
-  const created = [], logs = [], warnings = [], fetched = [], pending = new Map();
+  const created = [], logs = [], warnings = [], fetched = [], pending = new Map(), clips = [];
   let clock = 0, timerId = 0, tickFn = null;
   const page$ = {}, listeners = {}; // page$: selector -> element document.querySelector finds
   const box = { player }; // swapped by setPlayer(): the player can show up later
@@ -341,7 +343,10 @@ function contentPage({ manifestTracks, fetchText, prefs = { orig: 'en', trans: '
     getAllPlayerSessionIds: () => (box.player ? ['watch-1'] : []), getVideoPlayerBySessionId: () => box.player };
   const ctx = {
     console: { info: (...a) => logs.push(a.join(' ')), warn: (...a) => warnings.push(a), log() {}, error() {} },
-    navigator: { language: 'en-US' },
+    navigator: { language: 'en-US', clipboard: clipboard && { writeText: async text => {
+      if (clipboard === 'deny') throw Object.assign(new Error('Write permission denied.'), { name: 'NotAllowedError' });
+      clips.push(text);
+    } } },
     localStorage: { getItem: () => JSON.stringify(prefs), setItem: (k, v) => onSave(v) }, // onSave: the prefs written
     location: { pathname: '/watch/80000001', origin: 'https://www.netflix.com' },
     // A fast clock so hydrate()'s waitFor gives up at once (no Netflix player here).
@@ -382,6 +387,10 @@ function contentPage({ manifestTracks, fetchText, prefs = { orig: 'en', trans: '
       createElement: tag => new El(tag), createElementNS: (ns, tag) => new El(tag),
       addEventListener() {}, querySelector: sel => page$[sel] || null, fullscreenElement: null, elementFromPoint: () => page$.pointAt,
       documentElement: new El('html'), body: new El('body'),
+      execCommand: cmd => { // the old way: copies the textarea content.js just selected
+        if (cmd === 'copy' && execOk) clips.push(created.filter(e => e.tagName === 'TEXTAREA').pop().value);
+        return execOk;
+      },
     },
   };
   ctx.window = ctx;
@@ -470,7 +479,7 @@ function contentPage({ manifestTracks, fetchText, prefs = { orig: 'en', trans: '
   const outcome = () => !!hintEl.textContent && !hintEl.textContent.startsWith(loadingHint);
   return { ui, hint: () => hintEl.textContent, outcome, strip, transSel, lines, pickTrans, watch, timers, fire, settle, logs, warnings,
     fetched, until, manifest: manifestFor, popup, origEl, transEl, goPath, setPlayer: p => { box.player = p; }, pickOrig,
-    show, tick, key, root, panel, online: () => (listeners.online || []).forEach(fn => fn({ type: 'online' })), list, El, posted, replies, otherTab, storageCalls, hintEl, toastEl: created.find(e => e.id === 'dualsub-toast'), send: msg => deliver({ source: 'dualsub', ...msg }),
+    show, tick, key, root, panel, clips, online: () => (listeners.online || []).forEach(fn => fn({ type: 'online' })), list, El, posted, replies, otherTab, storageCalls, hintEl, toastEl: created.find(e => e.id === 'dualsub-toast'), send: msg => deliver({ source: 'dualsub', ...msg }),
     star: created.find(e => e.tagName === 'BUTTON' && e.title === ui('saveLine')),
     wordStar: () => created.filter(e => e.className === 'ds-pop-star').pop() || null,
     // Click a word of the shown line, or press on word `from` and release on word `to` (a phrase).
@@ -2178,4 +2187,178 @@ test('O2 14: no translation (none chosen, or not offered): one step, one "loaded
     assert.deepEqual(seen.filter(h => h && h !== page.ui('hintLoading', 'English') && h !== page.hint()), [], JSON.stringify(seen)); // no wait for a translation
     assert.equal(page.hint(), trans ? page.ui('hintNoTrans', 'Japanese') : '');
   }
+});
+
+test('toTranscript: title, "[m:ss] original" with the translation below, blank lines between', () => {
+  const lines = [{ start: 641.2, text: 'Wo ist Mikkel?', trans: '미켈은 어디 있어?' },
+    { start: 644, text: 'Er ist\nweg.', trans: '그는\n  사라졌어.' }];
+  assert.equal(toTranscript('Dark · S1:E1', lines),
+    'Dark · S1:E1\n\n[10:41] Wo ist Mikkel?\n미켈은 어디 있어?\n\n[10:44] Er ist weg.\n그는 사라졌어.');
+  // no title: no title line and no blank line before the first line
+  assert.equal(toTranscript('', lines.slice(0, 1)), '[10:41] Wo ist Mikkel?\n미켈은 어디 있어?');
+  // no translation, or a blank one: no translation line
+  assert.equal(toTranscript('', [{ start: 1, text: 'Hallo', trans: undefined }, { start: 2, text: 'Ja', trans: ' \n ' },
+    { start: 3, text: 'Nein', trans: '' }]), '[0:01] Hallo\n\n[0:02] Ja\n\n[0:03] Nein');
+  // past an hour: h:mm:ss
+  assert.equal(toTranscript('', [{ start: 3725.9, text: 'Spät', trans: '늦었어' }]), '[1:02:05] Spät\n늦었어');
+});
+
+// Range copy from the list (Shift+click). Lines i at 3i+1 … 3i+2 s, in English and Korean.
+const rangeTexts = n => Array.from({ length: n }, (_, i) => [i === 1 ? 'Line<br/>one' : `Line ${i}`, `줄 ${i}`]);
+const ttmlMany = texts => `<tt xmlns="http://www.w3.org/ns/ttml"><body><div>${texts.map((x, i) =>
+  `<p begin="${3 * i + 1}s" end="${3 * i + 2}s">${x}</p>`).join('')}</div></body></tt>`;
+async function rangePage(n = 8, opts = {}) {
+  const texts = rangeTexts(n), seeks = [];
+  const player = { getMovieId: () => 80000001, seek: ms => seeks.push(ms), play() {}, getTimedTextTrackList: () => [], getTimedTextTrack: () => null };
+  const page = contentPage({ manifestTracks: both(), player, clipboard: 'ok',
+    fetchText: url => ttmlMany(texts.map(x => x[url.endsWith('en') ? 0 : 1])), ...opts });
+  await page.until(() => page.lines().length === n && page.lines()[n - 1][1], 'both tracks');
+  const v = { currentTime: 0, paused: false, playbackRate: 1 };
+  page.show('video', v);
+  page.tick();
+  const at = i => { v.currentTime = 3 * i + 1.5; page.tick(); }; // line i on screen
+  const item = i => page.list.children[i];
+  const click = (i, shiftKey = false) => page.list.dispatch('click', { target: item(i).children[0], shiftKey });
+  const marked = () => page.list.children.flatMap((x, i) => (x.classList.contains('ds-sel') ? [i] : []));
+  const block = i => `[${formatTime(3 * i + 1)}] ${i === 1 ? 'Line one' : `Line ${i}`}\n줄 ${i}`;
+  const range = (lo, hi, title) => [...(title ? [title] : []), ...Array.from({ length: hi - lo + 1 }, (_, j) => block(lo + j))].join('\n\n');
+  return { page, seeks, v, at, click, marked, range, item };
+}
+
+test('range copy: Shift+click copies from the line on screen, without jumping; the start stays for the next one', async () => {
+  const { page, seeks, at, click, marked, range } = await rangePage();
+  const title = new page.El('div');
+  for (const x of ['Dark', 'S1:E1 Secrets']) { const c = new page.El('span'); c.textContent = x; title.append(c); }
+  page.show('[data-uia="video-title"]', title);
+  at(2);
+  click(4, true);
+  await page.settle();
+  assert.deepEqual(seeks, []); // no jump
+  assert.deepEqual(page.clips, [range(2, 4, 'Dark · S1:E1 Secrets')]);
+  assert.equal(page.toastEl.textContent, page.ui('copiedLines', 3));
+  assert.deepEqual(marked(), [2, 3, 4]);
+  // Playback went on to line 0; the range still starts at line 2, now upwards (lines 1 … 2, the two-line cue joined).
+  at(0);
+  click(1, true);
+  await page.settle();
+  assert.equal(page.clips[1], range(1, 2, 'Dark · S1:E1 Secrets'));
+  assert.deepEqual(marked(), [1, 2]);
+  assert.deepEqual(seeks, []);
+});
+
+test('range copy: a plain click jumps as before, clears the marks and is where the next range starts', async () => {
+  const { page, seeks, at, click, marked, range } = await rangePage();
+  at(1);
+  click(3, true);
+  await page.settle();
+  assert.deepEqual(marked(), [1, 2, 3]);
+  click(5); // plain click: jump to line 5
+  assert.deepEqual(seeks, [16000]);
+  assert.deepEqual(marked(), []);
+  assert.equal(page.clips.length, 1);
+  at(5);
+  click(3, true);
+  await page.settle();
+  assert.equal(page.clips[1], range(3, 5));
+  click(7, true); // the same start, the other way
+  await page.settle();
+  assert.equal(page.clips[2], range(5, 7));
+  assert.deepEqual(marked(), [5, 6, 7]);
+  assert.deepEqual(seeks, [16000]);
+});
+
+test('range copy: a new cue list starts afresh; with no line on screen a Shift+click copies that line alone', async () => {
+  const { page, at, click, marked, range } = await rangePage();
+  click(6);
+  at(6);
+  click(4, true);
+  await page.settle();
+  assert.equal(page.clips[0], range(4, 6));
+  page.pickTrans(''); // translation off: the list is rebuilt, the marks and the start go
+  await page.until(() => !page.lines()[0][1], 'the list without translations');
+  assert.deepEqual(marked(), []);
+  at(2); // the start is now the line on screen, not the line clicked before
+  click(3, true);
+  await page.settle();
+  assert.equal(page.clips[1], '[0:07] Line 2\n\n[0:10] Line 3'); // no translation lines
+  // A fresh page with nothing on screen (before the first line): just the line clicked.
+  const fresh = await rangePage();
+  fresh.click(3, true);
+  await fresh.page.settle();
+  assert.deepEqual(fresh.page.clips, [fresh.range(3, 3)]);
+  assert.equal(fresh.page.toastEl.textContent, fresh.page.ui('copiedOneLine'));
+  assert.deepEqual(fresh.marked(), [3]);
+});
+
+test('range copy: hidden lines (W/E) are copied too', async () => {
+  const { page, at, click, range } = await rangePage();
+  at(0);
+  assert.equal(page.key('KeyW'), true);
+  assert.equal(page.key('KeyE'), true);
+  click(1, true);
+  await page.settle();
+  assert.deepEqual(page.clips, [range(0, 1)]);
+});
+
+test('range copy: at most 100 lines, the earliest, with a note saying so', async () => {
+  const { page, click, marked, range } = await rangePage(150);
+  click(10);
+  click(110, true); // 101 lines: the first 100
+  await page.settle();
+  assert.equal(page.clips[0], range(10, 109));
+  assert.equal(page.toastEl.textContent, page.ui('copiedLinesMax', 100));
+  assert.deepEqual(marked(), Array.from({ length: 100 }, (_, j) => 10 + j));
+  click(109, true); // exactly 100: no note
+  await page.settle();
+  assert.equal(page.clips[1], range(10, 109));
+  assert.equal(page.toastEl.textContent, page.ui('copiedLines', 100));
+  click(149);
+  click(0, true); // upwards, 150 lines: still the earliest 100
+  await page.settle();
+  assert.equal(page.clips[2], range(0, 99));
+  assert.equal(page.toastEl.textContent, page.ui('copiedLinesMax', 100));
+});
+
+test('range copy: a blocked clipboard falls back to execCommand; if that fails too, copyFailed', async () => {
+  const fallback = await rangePage(8, { clipboard: 'deny' });
+  fallback.click(2);
+  fallback.click(3, true);
+  await fallback.page.settle();
+  assert.deepEqual(fallback.page.clips, [fallback.range(2, 3)]);
+  assert.equal(fallback.page.toastEl.textContent, fallback.page.ui('copiedLines', 2));
+  const failed = await rangePage(8, { clipboard: 'deny', execOk: false });
+  failed.click(2);
+  failed.click(3, true);
+  await failed.page.settle();
+  assert.deepEqual(failed.page.clips, []);
+  assert.equal(failed.page.toastEl.textContent, failed.page.ui('copyFailed'));
+});
+
+test('range copy: Esc clears the marks and still reaches Netflix; Shift+press selects no text', async () => {
+  const { page, at, click, marked, item } = await rangePage();
+  at(1);
+  click(2, true);
+  await page.settle();
+  assert.deepEqual(marked(), [1, 2]);
+  assert.equal(page.key('Escape'), false); // not taken: Netflix gets it
+  assert.deepEqual(marked(), []);
+  let prevented = false;
+  page.root.dispatch('mousedown', { target: item(4).children[0], shiftKey: true, button: 0,
+    preventDefault() { prevented = true; }, stopPropagation() {} });
+  assert.equal(prevented, true);
+});
+
+test('copy (C): still the shown original as one line, through the clipboard or the fallback', async () => {
+  const { page, at } = await rangePage();
+  at(1);
+  assert.equal(page.key('KeyC'), true);
+  await page.settle();
+  assert.deepEqual(page.clips, ['Line one']);
+  assert.equal(page.toastEl.textContent, page.ui('copied'));
+  const failed = await rangePage(8, { clipboard: 'deny', execOk: false });
+  failed.at(1);
+  failed.page.key('KeyC');
+  await failed.page.settle();
+  assert.deepEqual(failed.page.clips, []);
+  assert.equal(failed.page.toastEl.textContent, failed.page.ui('copyFailed'));
 });
